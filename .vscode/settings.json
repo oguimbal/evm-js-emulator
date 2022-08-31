@@ -1,0 +1,23 @@
+{
+    "mochaExplorer.files": ["tests/**/*.spec.ts"],
+    "mochaExplorer.require": ["ts-node/register"],
+    "mochaExplorer.cwd": ".",
+    "mochaExplorer.debuggerPort": 9590,
+    "mochaExplorer.env": {
+        "TS_NODE_PROJECT": "tsconfig.json"
+    },
+    "mochaExplorer.timeout": 200000,
+    "mochaExplorer.debuggerConfig": "Debug Mocha Tests",
+    "files.exclude": {
+        "**/.git": true,
+        "**/.svn": true,
+        "**/.hg": true,
+        "**/CVS": true,
+        "**/.DS_Store": true,
+        "dist": true,
+        "**/.deploy": true,
+        "yarn.lock": true
+    },
+    "editor.defaultFormatter": "vscode.typescript-language-features",
+    "editor.tabSize": 4,
+}

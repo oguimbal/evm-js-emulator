@@ -1,0 +1,6 @@
+yarn-error.log
+node_modules
+.contract-cache
+.bytecode-cache
+.env
+private
