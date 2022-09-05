@@ -76,6 +76,10 @@ class BlockchainState implements ExecState {
     get gas(): UInt256 {
         return this.stack.gas.copy();
     }
+    /** How much gas has been spent */
+    get gasSpent(): UInt256 {
+        return this.stack.gasLimit.sub(this.stack.gas);
+    }
     get gasPrice(): UInt256 {
         return this.shared.gasPrice.copy();
     }
@@ -89,7 +93,7 @@ class BlockchainState implements ExecState {
         return this.stack.address;
     }
     get origin(): UInt256 {
-        return this.stack.caller;
+        return this.store.currentTx.origin;
     }
 
     private get current0x() {
@@ -146,11 +150,12 @@ class BlockchainState implements ExecState {
     }
 
     decrementGas(num: number | UInt256): void {
-        if (this.gas.lt(num)) {
-            throw new Error('Out of gas');
-        }
-        // decrement in a mutable way ()
-        this.gas.sub(num, true);
+        // TODO implement gas properly
+        // if (this.gas.lt(num)) {
+        //     throw new Error('Out of gas');
+        // }
+        // // decrement in a mutable way ()
+        // this.stack.gas.sub(num, true);
     }
 
     newTx(data: NewTxData): ExecState {
@@ -158,7 +163,7 @@ class BlockchainState implements ExecState {
             throw new Error('A tx is already being executed');
         }
         const full: Stack = {
-            address: data.contract,
+            address: data.address ?? data.contract,
             calldata: new MemReader(data.calldata),
             caller: data.caller ?? data.origin,
             callValue: data.callvalue,
@@ -181,7 +186,6 @@ class BlockchainState implements ExecState {
         return new BlockchainState(this.store.set('callStack', this.store.callStack.push({
             ...this.store.callStack.last(),
             ...stack,
-            gas: (stack.gas ?? this.stack.gas).copy(),
         })));
     }
 
@@ -204,6 +208,7 @@ class BlockchainState implements ExecState {
             address: contract,
             currentStorageCtx: contract,  // switch to the called contract's context  (balance & storage)
             callValue,
+            caller: this.address,
         })
     }
 
@@ -218,19 +223,22 @@ class BlockchainState implements ExecState {
             ...this._buildStack(calldata, retdatasize, gasLimit),
             address: contract, // only change contract address
             currentStorageCtx: contract,  // switch to the called contract's context  (balance & storage)
+            caller: this.address,
+            callValue: U256(0),
             static: true,
         });
     }
 
     private _buildStack(calldata: Uint8Array, retdatasize: number, gasLimit: UInt256): Partial<Stack> {
-        if (this.gas.lt(gasLimit)) {
-            throw new Error('Not enough gas');
-        }
+        // TODO implement gas properly
+        // if (this.gas.lt(gasLimit)) {
+        //     throw new Error('Not enough gas');
+        // }
         return {
             calldata: new MemReader(calldata),
             retdatasize,
-            gasLimit,
-            gas: gasLimit,
+            gasLimit: gasLimit.copy(),
+            gas: gasLimit.copy(),
         };
     }
 

@@ -27,25 +27,19 @@ export class Executor implements IExecutor {
     private notifyMemChanged = false;
     private run: () => void;
     private lastReturndata: MemReader = new MemReader([]);
+    private knownSequence: string | null = null;
 
 
     get contractName(): string {
-        return this.code.name ?? dumpU256(this.code.contractAddress);
+        return this.code.contractName ?? dumpU256(this.code.contractAddress);
     }
 
     get contractAddress(): UInt256 {
         return this.code.contractAddress;
     }
 
-    get callerAddress(): UInt256 {
-        return this.state.caller;
-    }
-    get originAddress(): UInt256 {
-        return this.state.origin;
-    }
-
     //  private contract: ContractState, private opts: ExecutionOptions
-    constructor(private state: ExecState, private code: CompiledCode) {
+    constructor(public state: ExecState, private code: CompiledCode) {
         this.run = code(this);
 
     }
@@ -59,7 +53,7 @@ export class Executor implements IExecutor {
         const result: StopReason = this.stop ?? {
             type: 'end of code',
             newState: this.state,
-            gas: this.state.gas,
+            gas: this.state.gasSpent,
         };
         for (const or of this._onResult) {
             or(result);
@@ -113,18 +107,18 @@ export class Executor implements IExecutor {
         }
     }
 
-    watch(handler: (opcode: number, opName: string, paddedOpName: string, opSpy: string[]) => any) {
+    watch(handler: (opcode: number, opName: string, paddedOpName: string, opSpy: string[], knownSeq: string | null) => any) {
         this.spyOps((fn, opname, padded, opcode) => fn.isAsync
             ? async (...args: any[]) => {
                 const spy = this.opSpy = [];
                 await fn(...args);
                 this.opSpy = null;
-                handler(opcode, opname, padded, spy);
+                handler(opcode, opname, padded, spy, this.knownSequence);
             } : (...args: any[]) => {
                 const spy = this.opSpy = [];
                 fn(...args);
                 this.opSpy = null;
-                handler(opcode, opname, padded, spy);
+                handler(opcode, opname, padded, spy, this.knownSequence);
             });
     }
 
@@ -180,6 +174,14 @@ export class Executor implements IExecutor {
         return !poped.eq(0);
     }
 
+    startKnownSequence(seq: string) {
+        this.knownSequence = seq;
+    }
+
+    endKnownSequence() {
+        this.knownSequence = null;
+    }
+
     getStack(n: number) {
         const at = this.stack.length - n;
         if (at < 0) {
@@ -201,7 +203,7 @@ export class Executor implements IExecutor {
         this.stop = {
             type: 'stop',
             newState: this.state,
-            gas: this.state.gas,
+            gas: this.state.gasSpent,
         };
     }
     op_add() {
@@ -857,7 +859,7 @@ export class Executor implements IExecutor {
         this.stop = {
             type: 'return',
             data: this.getData(),
-            gas: this.state.gas,
+            gas: this.state.gasSpent,
             newState: this.state,
         }
     }
@@ -924,7 +926,7 @@ export class Executor implements IExecutor {
         this.stop = {
             type: 'revert',
             data: this.getData(),
-            gas: this.state.gas,
+            gas: this.state.gasSpent,
         }
     }
     op_invalid() {

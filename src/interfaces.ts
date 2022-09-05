@@ -32,8 +32,10 @@ export interface NewTxData {
     static: boolean;
     /** User who sent this transaction */
     origin: UInt256;
-    /** @deprecated use with care (customises the caller) */
+    /** @deprecated use with care */
     caller?: UInt256;
+    /** @deprecated use with care */
+    address?: UInt256;
     /** How much ETH has been sent for this execution */
     callvalue: UInt256;
     gasLimit: UInt256;
@@ -54,6 +56,8 @@ export interface ExecState {
 
     /** How much gas is left */
     readonly gas: UInt256;
+    /** How much gas has been spent */
+    readonly gasSpent: UInt256;
     readonly gasPrice: UInt256;
     readonly gasLimit: UInt256;
     readonly callvalue: UInt256;
@@ -115,12 +119,11 @@ export function isFailure(result: StopReason): result is Revert {
 
 export interface IExecutor {
     readonly contractName: string;
-    readonly callerAddress: UInt256;
-    readonly originAddress: UInt256;
+    readonly state: ExecState;
     readonly contractAddress: UInt256;
     readonly stack: readonly UInt256[];
     execute(): Promise<StopReason>
-    watch(handler: (opcode: number, opName: string, paddedOpName: string, opSpy: string[]) => any): void;
+    watch(handler: (opcode: number, opName: string, paddedOpName: string, opSpy: string[], inKnownSequence: string | null) => any): void;
     onMemChange(fn: (bytes: () => number[]) => void): void;
     onStartingCall(fn: OnStartingCall): void;
     onEndingCall(fn: OnEndedCall): void;

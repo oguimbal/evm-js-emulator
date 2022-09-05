@@ -7,7 +7,7 @@ import keccak256 from 'keccak256';
 
 export const MAX_UINT = toUint('0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF');
 
-export function toUint(buf: Uint8Array | string): UInt256 {
+export function toUint(buf: Uint8Array | HexString | string): UInt256 {
     if (typeof buf === 'string') {
         if (buf.startsWith('0x')) {
             buf = buf.substring(2);
@@ -85,7 +85,7 @@ export function getNodejsLibs() {
     return {};
 }
 
-export function parseBuffer(data: string): Uint8Array {
+export function parseBuffer(data: HexString | string): Uint8Array {
     if (data.startsWith('0x')) {
         data = data.substring(2);
     }

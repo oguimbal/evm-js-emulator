@@ -1,6 +1,6 @@
 import 'mocha';
 import {  expect } from 'chai';
-import { executeBytecode, execWatchInstructions, incrementingArray, newTxData, toUintBuffer } from './test-utils';
+import { executeBytecode, execWatchInstructions, incrementingArray, newTxData, TEST_SESSION_OPTS, toUintBuffer } from './test-utils';
 import { dumpU256, generateAddress, to0xAddress, toUint } from '../src/utils';
 import { Session } from '../src/session';
 
@@ -403,10 +403,13 @@ describe('Simple opcodes', () => {
     });
 
 
-    async function addressTest(code: string, op: 'call' | 'staticcall' | 'delegatecall' | 'callcode') {
+    async function callSomeCode(codeToCall: string, op: 'call' | 'staticcall' | 'delegatecall' | 'callcode') {
 
-        const session = new Session();
-        const getAddressContract = await session.deployRaw(code);
+        const session = new Session(TEST_SESSION_OPTS);
+
+        // this contract will call the right opcode
+        // ... this is executed by the NVM in Opcodes.t.sol:testOrigin_call, ...
+        const addressGetterContract = await session.deployRaw(codeToCall);
 
         let opcode: number;
         let hasValue = false;
@@ -429,13 +432,15 @@ describe('Simple opcodes', () => {
                 throw new Error('invalid op');
         }
 
+        // this contract is just a relayer => it just calls the given bytecode
+        // ... this is the unit test in Opcodes.t.sol
         const callerContract = await session.deployRaw(new Uint8Array([
             0x60, 0x20, // push1 retSize
             0x60, 0, // push1 retOffset
             0x60, 0, // push1 argSize
             0x60, 0, // push1 argOffset
             ...hasValue ? [0x60, 0] : [], // push 0 as value if necessary
-            0x7f, ...getAddressContract.toByteArray(), // push32 contract to call
+            0x7f, ...addressGetterContract.toByteArray(), // push32 contract to call
             0x5a, // gas
             opcode, // delegatecall
 
@@ -444,21 +449,18 @@ describe('Simple opcodes', () => {
             0x51, // mload
 
             0x90 // swap1 => [ok, callResult]
-
-
-            // 0x50, // pop result
-
-            // // return:
-            // 0x60, 0x20, // push1 retSize
-            // 0x60, 0, // push1 retOffset
-            // 0xf3, // return
         ]));
 
 
-        const caller = generateAddress('caller');
-        const origin = generateAddress('origin');
+        // generate addresses
+        const origin = generateAddress('origin'); // this is the tx sender
+        console.log(`Contracts:
+        origin: ${to0xAddress(origin)}
+        callerContract: ${to0xAddress(callerContract)}
+        addressGetterContract: ${to0xAddress(addressGetterContract)}`);
+
+        // call
         const exec = await session.prepareCall(newTxData(callerContract, {
-            caller,
             origin,
             static: op === 'staticcall',
         }));
@@ -468,35 +470,83 @@ describe('Simple opcodes', () => {
 
         const result = to0xAddress(exec.pop());
         switch (result) {
-            case to0xAddress(caller):
-                return 'caller' as const;
             case to0xAddress(origin):
                 return 'origin' as const;
             case to0xAddress(callerContract):
                 return 'callerContract' as const;
-            case to0xAddress(getAddressContract):
-                return 'getAddressContract' as const;
+            case to0xAddress(addressGetterContract):
+                return 'addressGetterContract' as const;
             default:
                 throw new Error('Unexpected address ' + result);
         }
     }
 
+    describe('address', () => {
 
-    it('address in delegatecall', async () => {
-        // see testAddress_delegatecall() of NVM
-        const result = await addressTest('3060005260ff6000f3', 'delegatecall');
-        expect(result).to.equal('callerContract');
-    });
+        it('address in delegatecall', async () => {
+            // see testAddress_delegatecall() of NVM
+            const result = await callSomeCode('3060005260ff6000f3', 'delegatecall');
+            expect(result).to.equal('callerContract');
+        });
 
-    it('address in call', async () => {
-        // see testAddress_call() of NVM
-        const result = await addressTest('3060005260ff6000f3', 'call');
-        expect(result).to.equal('getAddressContract');
-    });
+        it('address in call', async () => {
+            // see testAddress_call() of NVM
+            const result = await callSomeCode('3060005260ff6000f3', 'call');
+            expect(result).to.equal('addressGetterContract');
+        });
 
-    it('address in staticcall', async () => {
-        // see testAddress_staticcall() of NVM
-        const result = await addressTest('3060005260ff6000f3', 'staticcall');
-        expect(result).to.equal('getAddressContract');
-    });
+        it('address in staticcall', async () => {
+            // see testAddress_staticcall() of NVM
+            const result = await callSomeCode('3060005260ff6000f3', 'staticcall');
+            expect(result).to.equal('addressGetterContract');
+        });
+
+    })
+
+
+
+    describe ('origin', () => {
+
+        it('origin in delegatecall', async () => {
+            // see testOrigin_delegatecall() of NVM
+            const result = await callSomeCode('3260005260ff6000f3', 'delegatecall');
+            expect(result).to.equal('origin');
+        });
+
+        it('origin in call', async () => {
+            // see testOrigin_call() of NVM
+            const result = await callSomeCode('3260005260ff6000f3', 'call');
+            expect(result).to.equal('origin');
+        });
+
+        it('origin in staticcall', async () => {
+            // see testOrigin_staticcall() of NVM
+            const result = await callSomeCode('3260005260ff6000f3', 'staticcall');
+            expect(result).to.equal('origin');
+        });
+    })
+
+
+    describe ('caller', () => {
+
+        it('caller in delegatecall', async () => {
+            // see testCaller_delegatecall() of NVM
+            const result = await callSomeCode('3360005260ff6000f3', 'delegatecall');
+            expect(result).to.equal('origin');
+        });
+
+        it('caller in call', async () => {
+            // see testCaller_call() of NVM
+            const result = await callSomeCode('3360005260ff6000f3', 'call');
+            expect(result).to.equal('callerContract');
+        });
+
+        it('caller in staticcall', async () => {
+            // see testCaller_staticcall() of NVM
+            const result = await callSomeCode('3360005260ff6000f3', 'staticcall');
+            expect(result).to.equal('callerContract');
+        });
+    })
+
+
 });

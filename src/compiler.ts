@@ -2,25 +2,127 @@ import keccak256 from 'keccak256';
 import { Executor, ops } from './executor';
 import { CompiledCode, HexString } from './interfaces';
 import { MemReader } from './mem-reader';
-import { generateAddress, getNodejsLibs, to0xAddress } from './utils';
+import { UInt256 } from './uint256';
+import { generateAddress, getNodejsLibs, to0xAddress, toUint } from './utils';
 
 const p = Executor.prototype;
 
-export function compileCode(contractCode: Uint8Array, _contractName: string | null | undefined | ((address: HexString) => string | null | undefined)): CompiledCode {
-    type CP = { address: number; isAsync: boolean; codeLines: string[]; };
-    const codeParts: CP[] = [];
+type CP = {
+    address: number;
+    isAsync: boolean;
+    codeLines: string[];
+    mayReturn: Ret;
+};
+type Ret = 'always' | 'maybe' | 'no';
+
+export function compileCode(contractCode: Uint8Array
+    , _contractName: string | null | undefined | ((address: HexString) => string | null | undefined)
+    , forceAddress?: UInt256
+    , knownSequences?: KnownSequence[]): CompiledCode {
+
+    // compute all labels
+    let codeParts = computeCodeparts(contractCode);
+
+    // compute known sequences
+    const { knownDetector, additionalCode } = detectKnownSequences(knownSequences)
+    codeParts = codeParts.map(knownDetector);
+
+    // compute final code
+    const address = forceAddress ?? generateAddress(contractCode);
+    const contractName = typeof _contractName === 'string'
+        ? _contractName
+        : _contractName?.(to0xAddress(address));
+    const hasAsync = codeParts.some(c => c.isAsync);
+
+    const label = contractName ? `${contractName}_label_` : 'label_';
+    const code = `
+// step into this to debug the contract
+// while puting watches: e.dumpStack(), e.dumpMemory(), e.dumpCalldata()
+
+function ${contractName ?? 'entry'}(e) {
+let mem, stack;
+
+${codeParts.map((c, i) => `const ${label}${c.address.toString(16)} = ${c.isAsync ? 'async' : ''} () =>  {
+    ${c.codeLines.join('\n    ')}
+${i !== codeParts.length - 1 && c.mayReturn !== 'always' ? `    return ${label}${codeParts[i + 1].address.toString(16)};` : ''}
+}`).join('\n\n')}
+
+${additionalCode().map((c) => `const ${c.name} = ${c.code.isAsync ? 'async' : ''} () =>  {
+try {
+    e.startKnownSequence('${c.name}');
+    ${c.code.codeLines.join('\n    ')}
+} finally { e.endKnownSequence(); }
+}`).join('\n\n')}
+
+const labels = new Map([${codeParts.map(c => `[0x${c.address.toString(16)}, ${label}${c.address.toString(16)}]`).join(',')}])
+function getLabel(address) {
+    const label = labels.get(address);
+    if (!label) {
+        throw new Error('Expected a JUMPDEST op at 0x' + address.toString(16));
+    }
+    return label;
+}
+
+return ${hasAsync ? 'async' : ''} () =>  {
+    stack = e.stack;
+    mem = e.mem;
+    let current = ${label}0; // start at address 0
+    while (current && !e.stop) {
+        current = ${hasAsync ? 'await ' : ''}current();
+    }
+};
+}`;
+
+    const { require, fs, path, process } = getNodejsLibs();
+    let bind: any;
+    if (fs) {
+        // when running NodeJS, lets write this in a file, in order to run it
+
+        const targetDir = path.resolve(process.cwd(), '.contract-cache');
+
+        // create an unique file name based on its hash, or starting by "µ" (so unnamed contracts appear last in alphabetical order)
+        const hash = (contractName ?? 'µ') + '_' + keccak256(Buffer.from(contractCode)).toString('hex');
+        const target = path.resolve(targetDir, `${hash}.js`);
+        if (!fs.existsSync(targetDir)) {
+            fs.mkdirSync(targetDir);
+        }
+
+        // write code
+        fs.writeFileSync(target, `${code}
+module.exports = ${contractName ?? 'entry'}`);
+
+        // init
+        bind = require(target);
+    } else {
+        // when running in a navigator, then eval this file.
+        bind = eval(`${code}
+${contractName ?? 'entry'} // return the program entry`);
+    }
+    bind.code = new MemReader(contractCode);
+    bind.contractName = contractName ?? null;
+    bind.contractAddress = address;
+    return bind;
+}
+
+
+
+function computeCodeparts(contractCode: Uint8Array) {
+    let codeParts: CP[] = [];
+    let currentAddress = 0;
+    let current: string[] = [];
+    let currentIsAsync = false;
+    let mayReturn: Ret = 'no';
     function finishCurrent() {
         codeParts.push({
             address: currentAddress,
             codeLines: current,
             isAsync: currentIsAsync,
+            mayReturn,
         });
         current = [];
         currentIsAsync = false;
+        mayReturn = 'no';
     }
-    let currentAddress = 0;
-    let current: string[] = [];
-    let currentIsAsync = false;
     for (let i = 0; i < contractCode.length; i++) {
         const opcode = contractCode[i];
         const fn = ops[opcode];
@@ -33,6 +135,7 @@ export function compileCode(contractCode: Uint8Array, _contractName: string | nu
                 break;
             case p.op_jump:
                 // jump has a special implementation
+                mayReturn = 'always';
                 current.push(
                     '// == jump: ',
                     '{',
@@ -43,6 +146,9 @@ export function compileCode(contractCode: Uint8Array, _contractName: string | nu
                 break;
             case p.op_jumpi:
                 // jumpi has a special implementation
+                if (mayReturn !== 'always') {
+                    mayReturn = 'maybe';
+                }
                 current.push(
                     '// == jumpi:',
                     '{',
@@ -66,6 +172,7 @@ export function compileCode(contractCode: Uint8Array, _contractName: string | nu
             case p.op_return:
             case p.op_stop:
             case p.op_revert:
+                mayReturn = 'always';
                 current.push(`return e.${fn.name}();`);
                 break;
             case p.op_invalid:
@@ -120,71 +227,91 @@ export function compileCode(contractCode: Uint8Array, _contractName: string | nu
         }
     }
     finishCurrent();
-
-    const address = generateAddress(contractCode);
-    const contractName = typeof _contractName === 'string'
-        ? _contractName
-        : _contractName?.(to0xAddress(address));
-    const hasAsync = codeParts.some(c => c.isAsync);
-    const label = contractName ? `${contractName}_label_` : 'label_';
-    const code = `
-// step into this to debug the contract
-// while puting watches: e.dumpStack(), e.dumpMemory(), e.dumpCalldata()
-
-function ${contractName ?? 'entry'}(e) {
-let mem, stack;
-
-${codeParts.map((c, i) => `const ${label}${c.address.toString(16)} = ${c.isAsync ? 'async' : ''} () =>  {
-${c.codeLines.join('\n    ')}
-${i !== codeParts.length - 1 ? `return ${label}${codeParts[i + 1].address.toString(16)};` : ''}
-}`).join('\n\n')}
-
-const labels = new Map([${codeParts.map(c => `[0x${c.address.toString(16)}, ${label}${c.address.toString(16)}]`).join(',')}])
-function getLabel(address) {
-    const label = labels.get(address);
-    if (!label) {
-        throw new Error('Expected a JUMPDEST op at 0x' + address.toString(16));
-    }
-    return label;
+    return codeParts;
 }
 
-return ${hasAsync ? 'async' : ''} () =>  {
-    stack = e.stack;
-    mem = e.mem;
-    let current = ${label}0; // start at address 0
-    while (current && !e.stop) {
-        current = ${hasAsync ? 'await ' : ''}current();
-    }
-};
-}`;
+export interface KnownSequence {
+    code: Uint8Array;
+    name: string;
+}
 
-    const { require, fs, path, process } = getNodejsLibs();
-    let bind: any;
-    if (fs) {
-        // when running NodeJS, lets write this in a file, in order to run it
+interface KnownCP {
+    name: string;
+    code: CP;
+}
 
-        const targetDir = path.resolve(process.cwd(), '.contract-cache');
-
-        // create an unique file name based on its hash, or starting by "µ" (so unnamed contracts appear last in alphabetical order)
-        const hash = (contractName ?? 'µ') + '_' + keccak256(Buffer.from(contractCode)).toString('hex');
-        const target = path.resolve(targetDir, `${hash}.js`);
-        if (!fs.existsSync(targetDir)) {
-            fs.mkdirSync(targetDir);
+function detectKnownSequences(_sequences: KnownSequence[] | undefined): { knownDetector: (cp: CP) => CP, additionalCode: () => KnownCP[]; } {
+    if (!_sequences?.length) {
+        return {
+            knownDetector: x => x,
+            additionalCode: () => [],
         }
-
-        // write code
-        fs.writeFileSync(target, `${code}
-module.exports = ${contractName ?? 'entry'}`);
-
-        // init
-        bind = require(target);
-    } else {
-        // when running in a navigator, then eval this file.
-        bind = eval(`${code}
-${contractName ?? 'entry'} // return the program entry`);
     }
-    bind.code = new MemReader(contractCode);
-    bind.contractName = contractName ?? null;
-    bind.contractAddress = address;
-    return bind;
+    const sequences = _sequences.map<KnownCP>(n => {
+        const code = computeCodeparts(n.code);
+        if (code.length !== 1) {
+            throw new Error('Invalid known sequence');
+        }
+        return {
+            code: code[0],
+            name: n.name,
+        };
+    });
+
+    const usedSequences = new Set<KnownCP>();
+
+    return {
+        knownDetector: cp => {
+            let codeLines = cp.codeLines;
+            for (const seq of sequences) {
+
+                if (seq.code.codeLines.length >= codeLines.length) {
+                    // not enough code lines in the given code to match this known sequence
+                    continue;
+                }
+                const seqSig = seq.code.codeLines.join('|');
+
+                // find an index at which this sequence is to be found
+                while (true) {
+                    let i = codeLines.findIndex((_, i) => seqSig === codeLines.slice(i, i + seq.code.codeLines.length).join('|'));
+                    if (i < 0) {
+                        break;
+                    }
+                    usedSequences.add(seq);
+                    const callSeq = `${seq.code.isAsync ? 'await ' : ''}${seq.name}();`;
+                    let compiled: string[];
+                    switch (seq.code.mayReturn) {
+                        case 'no':
+                            compiled = [callSeq + `// known sequence ${seq.name}`];
+                            break;
+                        case 'always':
+                            compiled = [`return  ${callSeq} // known sequence ${seq.name}`];
+                            break;
+                        case 'maybe':
+                            compiled = [
+                                `{ // known sequence ${seq.name}`,
+                                `   const seq = ${callSeq}`,
+                                '   if (seq) {',
+                                `        return seq;`,
+                                '   }',
+                                '}'
+                            ]
+                            break;
+                    }
+                    codeLines = [
+                        ...codeLines.slice(0, i),
+                        ...compiled,
+                        ...codeLines.slice(i + seq.code.codeLines.length),
+                    ];
+                }
+            }
+            return cp.codeLines === codeLines
+                ? cp
+                : {
+                    ...cp,
+                    codeLines,
+                };
+        },
+        additionalCode: () => [...usedSequences],
+    }
 }

@@ -1,7 +1,7 @@
 import * as dotenv from 'dotenv';
 dotenv.config()
 import { Buffer } from 'buffer';
-import { compileCode } from './compiler';
+import { compileCode, KnownSequence } from './compiler';
 import { newBlockchain, setStorageInstance } from './blockchain-state';
 import { Executor } from './executor';
 import { CompiledCode, ExecState, NewTxData, HexString, IExecutor, ISession, isFailure, IStorage, SessionOpts } from './interfaces';
@@ -13,6 +13,7 @@ import { from0x, getNodejsLibs, parseBuffer, to0xAddress, toUint } from './utils
 interface DeployOpts {
     balance?: UInt256;
     name?: string;
+    knownSequences?: KnownSequence[];
     forceId?: UInt256,
 }
 export class Session implements ISession {
@@ -63,7 +64,7 @@ export class Session implements ISession {
         if (code instanceof Buffer) {
             code = code.subarray()
         }
-        const compiled = compileCode(code, opts?.name ?? (a => this.opts?.contractsNames?.[a]));
+        const compiled = compileCode(code, opts?.name ?? (a => this.opts?.contractsNames?.[a]), opts?.forceId, opts?.knownSequences);
         this.contracts.set(to0xAddress(compiled.contractAddress), compiled);
         if (rawStorage) {
             setStorageInstance(this.state, compiled.contractAddress, rawStorage);
@@ -107,7 +108,7 @@ export class Session implements ISession {
         let compiled = this.contracts.get(key);
         if (!compiled) {
             const code = await this.getBytecodeFromCache(key);
-            compiled = compileCode(code,this.opts?.contractsNames?.[key] );
+            compiled = compileCode(code,this.opts?.contractsNames?.[key], contract);
             this.contracts.set(key, compiled);
         }
         return compiled!;
