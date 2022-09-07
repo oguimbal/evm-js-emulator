@@ -60,7 +60,7 @@ describe('Calls', () => {
         assert.isTrue(newBalance.gt(0));
     })
 
-    it('DoubleSwap', async () => {
+    it('DoubleSwap solidity', async () => {
         const doubleSwap = await session.deploy(DOUBLE_SWAP.NATIVE_BYTECODE, newDeployTxData(), {
             name: 'DoubleSwap_native',
         });
@@ -68,6 +68,19 @@ describe('Calls', () => {
 
         const exec = await session.prepareCall(newTxData(doubleSwap, {
             calldata: parseBuffer('64c2c785'),
+            origin: generateAddress('me'),
+        }));
+        await execWatchInstructions(exec);
+    })
+
+
+    it('DoubleSwap huff', async () => {
+        const doubleSwap = await session.deployRaw(DOUBLE_SWAP.HUFF_BYTECODE, {
+            name: 'DoubleSwap_huff',
+        });
+        await transferUsdcTo(session, doubleSwap, toUint('0xfffffffff'));
+
+        const exec = await session.prepareCall(newTxData(doubleSwap, {
             origin: generateAddress('me'),
         }));
         await execWatchInstructions(exec);
