@@ -74,13 +74,20 @@ export function shaOf(buffer: Uint8Array): UInt256 {
 }
 
 
+declare var __non_webpack_require__: any;
 declare var require: any;
 export function getNodejsLibs() {
-    if (typeof require === 'function') {
-        const fs = require('fs');
-        const path = require('path');
-        const process = require('process');
-        return { require, fs, path, process };
+    let req: any = undefined;
+    if (typeof __non_webpack_require__ === 'function') {
+        req = __non_webpack_require__;
+    } else if (typeof require === 'function') {
+        req = require;
+    }
+    if (req) {
+        const fs = req('fs');
+        const path = req('path');
+        const process = req('process');
+        return { require: req, fs, path, process };
     }
     return {};
 }

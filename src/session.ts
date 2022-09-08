@@ -16,6 +16,10 @@ interface DeployOpts {
     knownSequences?: KnownSequence[];
     forceId?: UInt256,
 }
+
+export function newSession(opts?: SessionOpts) {
+    return new Session(opts);
+}
 export class Session implements ISession {
     private contracts = new Map<string, CompiledCode>();
     readonly rpc: RPC;

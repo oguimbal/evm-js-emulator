@@ -2,11 +2,10 @@ import 'mocha';
 import { assert, expect } from 'chai';
 import { Session } from '../src/session';
 import { balanceOf, execWatchInstructions, HAS_USDC, newDeployTxData, newTxData, TEST_SESSION_OPTS, transferUsdcTo } from './test-utils';
-import { U256, UInt256 } from '../src/uint256';
+import { U256 } from '../src/uint256';
 import { DOUBLE_SWAP, DUMMY } from './bytecodes';
-import { dumpU256, generateAddress, parseBuffer, to0xAddress, toNumberSafe, toUint } from '../src/utils';
+import { generateAddress, parseBuffer, toNumberSafe, toUint } from '../src/utils';
 import { USDC } from './known-contracts';
-import { HexString, isSuccess } from '../src/interfaces';
 
 describe('Calls', () => {
 
