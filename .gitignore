@@ -2,6 +2,7 @@ yarn-error.log
 node_modules
 .contract-cache
 .bytecode-cache
+.rpc-cache
 .env
 private
 dist

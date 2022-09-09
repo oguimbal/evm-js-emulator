@@ -26,7 +26,7 @@ export class Session implements ISession {
     state: ExecState = newBlockchain(this);
 
     constructor(private opts?: SessionOpts) {
-        this.rpc = new RPC(opts?.rpcUrl ?? process.env.RPC_URL);
+        this.rpc = new RPC(opts?.rpcUrl ?? process.env.RPC_URL, opts?.maxRpcCacheTime);
         if (opts?.contractsNames) {
             opts.contractsNames = Object.fromEntries(Object.entries(opts.contractsNames)
                 .map(([k, v]) => [k.toLowerCase(), v]));
