@@ -127,13 +127,11 @@ export class Session implements ISession {
             // when running nodejs, check if we have this contract in cache
             if (fs.existsSync(cacheFile)) {
                 const data = fs.readFileSync(cacheFile, 'utf-8');
-                console.log(`Loaded contract from cache: ${contract}`);
                 return Buffer.from(data, 'hex').subarray();
             }
         }
 
         // download contract
-        console.log(`Downloading contract ${contract}...`);
         const online = await this.rpc.getCode(contract);
 
         if (cacheFile) {
