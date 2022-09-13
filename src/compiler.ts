@@ -73,22 +73,17 @@ return ${hasAsync ? 'async' : ''} () =>  {
 };
 }`;
 
-    const { require, fs, path, process } = getNodejsLibs();
+    const { require, writeCache } = getNodejsLibs();
     let bind: any;
-    if (fs) {
+    if (writeCache) {
         // when running NodeJS, lets write this in a file, in order to run it
 
-        const targetDir = path.resolve(process.cwd(), '.contract-cache');
 
         // create an unique file name based on its hash, or starting by "µ" (so unnamed contracts appear last in alphabetical order)
         const hash = (contractName ?? 'µ') + '_' + keccak256(Buffer.from(contractCode)).toString('hex');
-        const target = path.resolve(targetDir, `${hash}.js`);
-        if (!fs.existsSync(targetDir)) {
-            fs.mkdirSync(targetDir);
-        }
 
         // write code
-        fs.writeFileSync(target, `${code}
+        const target = writeCache(`contracts/${hash}.js`, `${code}
 module.exports = ${contractName ?? 'entry'}`);
 
         // init

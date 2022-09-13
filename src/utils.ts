@@ -87,7 +87,42 @@ export function getNodejsLibs() {
         const fs = req('fs');
         const path = req('path');
         const process = req('process');
-        return { require: req, fs, path, process };
+        const ensureDir = (dir: string) => {
+            const parent = path.resolve(dir, '..');
+            if (!fs.existsSync(parent)) {
+                ensureDir(parent);
+            }
+            if (!fs.existsSync(dir)) {
+                fs.mkdirSync(dir);
+            }
+        }
+        const globalCache = path.resolve(process.cwd(), '.evm-js-cache');
+        return {
+            require: req,
+            writeCache: (_file: string, content: string) => {
+                const file = path.resolve(globalCache, _file);
+                ensureDir(path.resolve(file, '..'));
+                fs.writeFileSync(file, content);
+                return file;
+            }, readCache: (_file: string, expire?: number) => {
+                const file = path.resolve(globalCache, _file);
+                if (!fs.existsSync(file)) {
+                    return null;
+                }
+                return fs.readFileSync(file, 'utf-8');
+            }, expireDir: (_dir: string, expire: number) => {
+                const cachePath = path.resolve(globalCache, _dir);
+                if (!fs.existsSync(cachePath)) {
+                    return;
+                }
+                const stat = fs.statSync(cachePath);
+                if (Date.now() - stat.ctimeMs > expire) {
+                    // invalidate cache
+                    fs.rmSync(cachePath, { recursive: true, force: true });
+                    fs.mkdirSync(cachePath);
+                }
+            }
+        };
     }
     return {};
 }
@@ -95,6 +130,9 @@ export function getNodejsLibs() {
 export function parseBuffer(data: HexString | string): Uint8Array {
     if (data.startsWith('0x')) {
         data = data.substring(2);
+    }
+    if (data.length % 2) {
+        data = '0' + data;
     }
     return Buffer.from(data, 'hex').subarray();
 }

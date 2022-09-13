@@ -3,6 +3,7 @@ import { HexString, IRpc } from './interfaces';
 import { UInt256 } from './uint256';
 import { dumpU256, getNodejsLibs, parseBuffer, toUint } from './utils';
 
+let id = 0;
 export class RPC implements IRpc {
 
     private block: string | undefined;
@@ -10,12 +11,13 @@ export class RPC implements IRpc {
     constructor(private url: string | null | undefined, private maxCache: number = 1000 * 3600 * 24) {
     }
 
-    private async fetchBuffer(opName: string, method: string, ...params: any[]) {
-        if (!this.block) {
+    private async fetchBuffer(opName: string, method: string, params: string[], forceBlock?: string) {
+        let atBlock = forceBlock ?? this.block;
+        if (!atBlock) {
             const block = await this._fetchBuffer(`get current block`, 'eth_blockNumber', [], 'latest');
-            this.block = '0x' + dumpU256(toUint(block));
+            atBlock = this.block = '0x' + dumpU256(toUint(block));
         }
-        return await this._fetchBuffer(opName, method, params, this.block);
+        return await this._fetchBuffer(opName, method, params, atBlock);
     }
     private async _fetchBuffer(opName: string, method: string, params: string[], block: string) {
 
@@ -27,43 +29,32 @@ export class RPC implements IRpc {
 
         let onCache: ((str: any) => void) | null = null;
         if (this.maxCache) {
-            const { fs, path, process } = getNodejsLibs();
-            if (fs) {
-                const cachePath = path.resolve(process.cwd(), '.rpc-cache');
-                if (fs.existsSync(cachePath)) {
-                    const stat = fs.statSync(cachePath);
-                    if (Date.now() - stat.ctimeMs > this.maxCache) {
-                        // invalidate cache
-                        fs.rmSync(cachePath, { recursive: true, force: true });
-                        fs.mkdirSync(cachePath);
-                    }
-                } else {
-                    fs.mkdirSync(cachePath);
-                }
-                const cacheFile = path.resolve(cachePath, cacheKey);
-                if (fs.existsSync(cacheFile)) {
-                    // cached locally => read it
-                    const data = fs.readFileSync(cacheFile, 'utf8');
-                    this.cache.set(cacheKey,  cached = parseBuffer(data.substring(2)));
+            const { readCache, writeCache, expireDir } = getNodejsLibs();
+            if (readCache) {
+                const cacheFile = `rpc/${cacheKey}`;
+                expireDir('rpc', this.maxCache);
+                const cachedRaw = readCache(cacheFile);
+                if (cachedRaw) {
+                    this.cache.set(cacheKey, cached = parseBuffer(cachedRaw.substring(2)));
                     return cached;
                 }
-
-                onCache = str => fs.writeFileSync(cacheFile, str);
+                onCache = str => writeCache(cacheFile, str);
             }
         }
 
         if (!this.url) {
             throw new Error('Cannot access real blockchain: You must specify a RPC URL');
         }
+        const body =JSON.stringify({
+            "jsonrpc": "2.0",
+            "method": method,
+            "params": [...params, block],
+            "id": ++id,
+        });
         const result = await fetch(this.url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                "jsonrpc": "2.0",
-                "method": method,
-                "params": [...params, block],
-                "id": 1,
-            })
+            body
         });
 
         const response: any = await result.json();
@@ -77,26 +68,26 @@ export class RPC implements IRpc {
         }
 
         onCache?.(response.result);
-        cached = parseBuffer(response.result.substring(2));
+        cached = parseBuffer(response.result);
         this.cache.set(cacheKey, cached);
         return cached;
     }
 
     async getBlock(): Promise<Uint8Array> {
-        return await this.fetchBuffer(`get current block`, 'eth_blockNumber');
+        return await this.fetchBuffer(`get current block`, 'eth_blockNumber', []);
     }
 
     async getCode(contract: HexString): Promise<Uint8Array> {
-        return await this.fetchBuffer(`get contract ${contract}`, 'eth_getCode', contract);
+        return await this.fetchBuffer(`get contract ${contract}`, 'eth_getCode', [contract]);
     }
 
     async getStorageAt(address: HexString, key: HexString): Promise<UInt256> {
-        const buffer = await this.fetchBuffer(`get storage at ${key}`, 'eth_getStorageAt', address, key);
+        const buffer = await this.fetchBuffer(`get storage at ${key}`, 'eth_getStorageAt', [address, key]);
         return toUint(buffer);
     }
 
     async getBalance(key: HexString): Promise<UInt256> {
-        const buffer = await this.fetchBuffer(`get balance of ${key}`, 'eth_getBalance', key);
+        const buffer = await this.fetchBuffer(`get balance of ${key}`, 'eth_getBalance', [key]);
         return toUint(buffer);
     }
 }

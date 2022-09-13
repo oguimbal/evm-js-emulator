@@ -6,6 +6,7 @@ import { KNOWN_CONTRACT, USDC } from './known-contracts';
 import { utils } from 'ethers';
 import { Session } from '../src/session';
 import { assert, expect } from 'chai';
+export * from './known-contracts';
 
 
 export const TEST_SESSION_OPTS: SessionOpts = {

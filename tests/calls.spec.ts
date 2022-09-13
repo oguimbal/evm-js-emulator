@@ -41,7 +41,6 @@ describe('Calls', () => {
     })
 
 
-
     it('call transfer', async () => {
 
         // check that has no USDC
@@ -83,5 +82,5 @@ describe('Calls', () => {
             origin: generateAddress('me'),
         }));
         await execWatchInstructions(exec);
-    })
+    });
 });
