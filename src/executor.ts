@@ -770,23 +770,23 @@ export class Executor implements IExecutor {
     }
     op_log0() {
         this.state.decrementGas(3);
-        this.logs.push({ data: this.getData(), topics: [], });
+        this.logs.push({ address: this.contractAddress, data: this.getData(), topics: [], });
     }
     op_log1() {
         this.state.decrementGas(3);
-        this.logs.push({ data: this.getData(), topics: [this.pop()], });
+        this.logs.push({ address: this.contractAddress, data: this.getData(), topics: [this.pop()], });
     }
     op_log2() {
         this.state.decrementGas(3);
-        this.logs.push({ data: this.getData(), topics: [this.pop(), this.pop()], });
+        this.logs.push({ address: this.contractAddress, data: this.getData(), topics: [this.pop(), this.pop()], });
     }
     op_log3() {
         this.state.decrementGas(3);
-        this.logs.push({ data: this.getData(), topics: [this.pop(), this.pop(), this.pop()], });
+        this.logs.push({ address: this.contractAddress, data: this.getData(), topics: [this.pop(), this.pop(), this.pop()], });
     }
     op_log4() {
         this.state.decrementGas(3);
-        this.logs.push({ data: this.getData(), topics: [this.pop(), this.pop(), this.pop(), this.pop()], });
+        this.logs.push({ address: this.contractAddress, data: this.getData(), topics: [this.pop(), this.pop(), this.pop(), this.pop()], });
     }
     op_create() {
         this.state.decrementGas(3);
@@ -818,10 +818,10 @@ export class Executor implements IExecutor {
         const result = await executor.execute();
 
         // push success flag on stack
-        this.setCallResult(result, retOffset, retSize, 'call');
+        this.setCallResult(result, retOffset, retSize, executor.logs, 'call');
     }
 
-    private setCallResult(result: StopReason, retOffset: number, retSize: number, type: 'call' | 'delegatecall' | 'callcode' | 'staticcall') {
+    private setCallResult(result: StopReason, retOffset: number, retSize: number, logs: Log[], type: 'call' | 'delegatecall' | 'callcode' | 'staticcall') {
         const success = isSuccess(result);
         this.pushBool(success);
         this._onEndCall?.forEach(c => c(this, type, success, result));
@@ -836,6 +836,8 @@ export class Executor implements IExecutor {
         // on success, update the current state
         this.state = result.newState
             .popCallStack();
+
+        this.logs.push(...logs);
 
         this.state.decrementGas(result.gas);
 
@@ -887,7 +889,7 @@ export class Executor implements IExecutor {
         const result = await executor.execute();
 
         // push success flag on stack
-        this.setCallResult(result, retOffset, retSize, 'delegatecall');
+        this.setCallResult(result, retOffset, retSize, executor.logs, 'delegatecall');
 
     }
 
@@ -919,7 +921,7 @@ export class Executor implements IExecutor {
         const result = await executor.execute();
 
         // push success flag on stack
-        this.setCallResult(result, retOffset, retSize, 'staticcall');
+        this.setCallResult(result, retOffset, retSize, executor.logs, 'staticcall');
     }
     op_revert() {
         this.state.decrementGas(3);

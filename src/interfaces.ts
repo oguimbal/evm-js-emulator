@@ -124,6 +124,7 @@ export interface IExecutor {
     readonly state: ExecState;
     readonly contractAddress: UInt256;
     readonly stack: readonly UInt256[];
+    readonly logs: readonly Log[];
     execute(): Promise<StopReason>
     watch(handler: (opcode: number, opName: string, paddedOpName: string, opSpy: string[], inKnownSequence: string | null) => any): void;
     onMemChange(fn: (bytes: () => number[]) => void): void;
@@ -141,6 +142,7 @@ export interface IExecutor {
 export type OnStartingCall = (exec: IExecutor, callType: 'call' | 'callcode' | 'staticcall' | 'delegatecall') => void;
 export type OnEndedCall = (exec: IExecutor, callType: 'call' | 'callcode' | 'staticcall' | 'delegatecall', success: boolean, reason: StopReason | undefined) => void;
 export interface Log {
-    topics: UInt256[];
-    data: Uint8Array;
+    readonly topics: readonly UInt256[];
+    readonly data: Uint8Array;
+    readonly address: UInt256;
 }
