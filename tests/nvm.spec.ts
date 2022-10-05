@@ -6,23 +6,23 @@ import { execWatchInstructions, newDeployTxData, newTxData, TEST_SESSION_OPTS, t
 import { from0x, generateAddress, parseBuffer, to0xAddress, toNumberSafe, toUint } from '../src/utils';
 import { U256, UInt256 } from '../src/uint256';
 import { NewTxData } from '../src/interfaces';
-import { DOUBLE_SWAP, DUMMY, NVM, NVM_CALLER } from './bytecodes';
+import { DOUBLE_SWAP, DUMMY, HyVM, HyVM_CALLER } from './bytecodes';
 
-describe('NVM executions', () => {
-    let nvmContract: UInt256;
+describe('HyVM executions', () => {
+    let hyvmContract: UInt256;
     let session: Session;
 
     beforeEach(async () => {
         session = new Session(TEST_SESSION_OPTS);
-        nvmContract = await session.deploy(NVM.BYTECODE, newDeployTxData(), {
-            name: 'nvm',
-            knownSequences: NVM.KNOWN_SEQUENCES
+        hyvmContract = await session.deploy(HyVM.BYTECODE, newDeployTxData(), {
+            name: 'hyvm',
+            knownSequences: HyVM.KNOWN_SEQUENCES
         });
     });
 
 
-    async function executeNvm(bytecode: string | Uint8Array, opts?: Partial<NewTxData>, noWatch?: boolean) {
-        const exec = await session.prepareCall(newTxData(nvmContract, {
+    async function executeHyVM(bytecode: string | Uint8Array, opts?: Partial<NewTxData>, noWatch?: boolean) {
+        const exec = await session.prepareCall(newTxData(hyvmContract, {
             ...opts,
             calldata: typeof bytecode === 'string'
                 ? parseBuffer(bytecode)
@@ -32,8 +32,8 @@ describe('NVM executions', () => {
     }
 
     it('add', async () => {
-        // see 'add' in NVM tests
-        const data = await executeNvm('600360040160005260ff6000f3');
+        // see 'add' in HyVM tests
+        const data = await executeHyVM('600360040160005260ff6000f3');
         const expected = new Uint8Array(0xff);
         expected[31] = 7;
         expect(data).to.deep.equal(expected);
@@ -43,7 +43,7 @@ describe('NVM executions', () => {
         const dummy = await session.deploy(DUMMY.BYTECODE, newDeployTxData(), {
             name: 'dummy',
         });
-        await executeNvm(DUMMY.CALL_SETTER(dummy), undefined, noWatch);
+        await executeHyVM(DUMMY.CALL_SETTER(dummy), undefined, noWatch);
         return dummy;
     }
 
@@ -61,7 +61,7 @@ describe('NVM executions', () => {
 
         const dummy = await callSetDummy(true);
 
-        const result = await executeNvm(DUMMY.CALL_GETTER(dummy))
+        const result = await executeHyVM(DUMMY.CALL_GETTER(dummy))
 
         expect([...result ?? []]).to.deep.equal([...U256(0x42).toByteArray()]);
     })
@@ -83,19 +83,19 @@ describe('NVM executions', () => {
     // })
 
     async function executeWithUsdc(code: string) {
-        // deploy NVM caller
-        const nvmCaller = await session.deploy(NVM_CALLER.BYTECODE, newDeployTxData(), {
-            name: 'NvmCaller',
+        // deploy HyVM caller
+        const hyvmCaller = await session.deploy(HyVM_CALLER.BYTECODE, newDeployTxData(), {
+            name: 'HyVMCaller',
             forceId: toUint('0x6b8c5b35a842ad24000000000000000000000000'),
         });
 
-        await transferUsdcTo(session, nvmCaller, toUint('0xfffffffff'));
+        await transferUsdcTo(session, hyvmCaller, toUint('0xfffffffff'));
 
-        const callDataHex = NVM_CALLER.ABI.encodeFunctionData('callNvm', [to0xAddress(nvmContract), Buffer.from(code, 'hex')]);
+        const callDataHex = HyVM_CALLER.ABI.encodeFunctionData('callNvm', [to0xAddress(hyvmContract), Buffer.from(code, 'hex')]);
         const calldata = parseBuffer(callDataHex);
 
-        // call NVM caller
-        const exec = await session.prepareCall(newTxData(nvmCaller, {
+        // call HyVM caller
+        const exec = await session.prepareCall(newTxData(hyvmCaller, {
             calldata,
             origin: toUint('0x26ea9e2167ca463b000000000000000000000000'),
         }));
@@ -103,7 +103,7 @@ describe('NVM executions', () => {
     }
 
     it('DoubleSwap solidity', async () => {
-        await executeWithUsdc(DOUBLE_SWAP.NVM_BYTECODE);
+        await executeWithUsdc(DOUBLE_SWAP.HyVM_BYTECODE);
     })
 
     it('DoubleSwap huff', async () => {

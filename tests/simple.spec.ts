@@ -1,8 +1,9 @@
 import 'mocha';
-import {  expect } from 'chai';
+import { expect } from 'chai';
 import { executeBytecode, execWatchInstructions, incrementingArray, newTxData, TEST_SESSION_OPTS, toUintBuffer } from './test-utils';
 import { dumpU256, generateAddress, to0xAddress, toUint } from '../src/utils';
 import { Session } from '../src/session';
+import { U256 } from '../src';
 
 describe('Simple opcodes', () => {
 
@@ -64,7 +65,7 @@ describe('Simple opcodes', () => {
             calldata: incrementingArray(100),
         });
 
-        const poped =exec.pop();
+        const poped = exec.pop();
         expect([...poped.toByteArray()]).to.deep.equal(incrementingArray(32, 2, true));
     });
 
@@ -371,6 +372,25 @@ describe('Simple opcodes', () => {
     });
 
 
+    it('selfbalance when has sent value', async () => {
+        const { exec } = await executeBytecode([
+            0x47 // SELFBALANCE
+        ], {
+            callvalue: U256(123)
+        }, U256(12345));
+        expect(exec.popAsNum()).to.equal(123);
+    });
+
+    it('balance of self when has sent value', async () => {
+        const { exec } = await executeBytecode([
+            0x30, // ADDRESS
+            0x31 // BALANCE
+        ], {
+            callvalue: U256(123),
+            origin: U256(0x1234),
+        }, U256(12345));
+        expect(exec.popAsNum()).to.equal(123);
+    });
 
     it('dup1', async () => {
         const { exec } = await executeBytecode([
@@ -408,7 +428,7 @@ describe('Simple opcodes', () => {
         const session = new Session(TEST_SESSION_OPTS);
 
         // this contract will call the right opcode
-        // ... this is executed by the NVM in Opcodes.t.sol:testOrigin_call, ...
+        // ... this is executed by the HyVM in Opcodes.t.sol:testOrigin_call, ...
         const addressGetterContract = await session.deployRaw(codeToCall);
 
         let opcode: number;
@@ -484,19 +504,19 @@ describe('Simple opcodes', () => {
     describe('address', () => {
 
         it('address in delegatecall', async () => {
-            // see testAddress_delegatecall() of NVM
+            // see testAddress_delegatecall() of HyVM
             const result = await callSomeCode('3060005260ff6000f3', 'delegatecall');
             expect(result).to.equal('callerContract');
         });
 
         it('address in call', async () => {
-            // see testAddress_call() of NVM
+            // see testAddress_call() of HyVM
             const result = await callSomeCode('3060005260ff6000f3', 'call');
             expect(result).to.equal('addressGetterContract');
         });
 
         it('address in staticcall', async () => {
-            // see testAddress_staticcall() of NVM
+            // see testAddress_staticcall() of HyVM
             const result = await callSomeCode('3060005260ff6000f3', 'staticcall');
             expect(result).to.equal('addressGetterContract');
         });
@@ -505,44 +525,44 @@ describe('Simple opcodes', () => {
 
 
 
-    describe ('origin', () => {
+    describe('origin', () => {
 
         it('origin in delegatecall', async () => {
-            // see testOrigin_delegatecall() of NVM
+            // see testOrigin_delegatecall() of HyVM
             const result = await callSomeCode('3260005260ff6000f3', 'delegatecall');
             expect(result).to.equal('origin');
         });
 
         it('origin in call', async () => {
-            // see testOrigin_call() of NVM
+            // see testOrigin_call() of HyVM
             const result = await callSomeCode('3260005260ff6000f3', 'call');
             expect(result).to.equal('origin');
         });
 
         it('origin in staticcall', async () => {
-            // see testOrigin_staticcall() of NVM
+            // see testOrigin_staticcall() of HyVM
             const result = await callSomeCode('3260005260ff6000f3', 'staticcall');
             expect(result).to.equal('origin');
         });
     })
 
 
-    describe ('caller', () => {
+    describe('caller', () => {
 
         it('caller in delegatecall', async () => {
-            // see testCaller_delegatecall() of NVM
+            // see testCaller_delegatecall() of HyVM
             const result = await callSomeCode('3360005260ff6000f3', 'delegatecall');
             expect(result).to.equal('origin');
         });
 
         it('caller in call', async () => {
-            // see testCaller_call() of NVM
+            // see testCaller_call() of HyVM
             const result = await callSomeCode('3360005260ff6000f3', 'call');
             expect(result).to.equal('callerContract');
         });
 
         it('caller in staticcall', async () => {
-            // see testCaller_staticcall() of NVM
+            // see testCaller_staticcall() of HyVM
             const result = await callSomeCode('3360005260ff6000f3', 'staticcall');
             expect(result).to.equal('callerContract');
         });

@@ -323,9 +323,12 @@ export class Executor implements IExecutor {
         this.state.decrementGas(3);
         this.push(this.state.address);
     }
-    op_balance() {
-        this.state.decrementGas(3);
-        throw new Error('not implemented: balance');
+    @asyncOp()
+    async op_balance() {
+        this.state.decrementGas(100);
+        const address = this.pop();
+        const bal = await this.state.getStorageOf(address).getBalance();
+        this.push(bal);
     }
     op_origin() {
         this.state.decrementGas(3);

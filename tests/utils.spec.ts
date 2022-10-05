@@ -4,7 +4,7 @@ import { deriveU256FromBuffer, dumpU256, from0x, to0xAddress, toUint } from '../
 import { Buffer } from 'buffer';
 import { U256, UInt256 } from '../src/uint256';
 import { MemReader } from '../src/mem-reader';
-import { incrementingArray } from './test-utils';
+import { incrementingArray, USDC } from './test-utils';
 
 describe('Utils', () => {
     it('deriveU256FromBuffer()', () => {
@@ -18,9 +18,8 @@ describe('Utils', () => {
     });
 
     it ('from0x', () => {
-        const usdc = '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48';
-        const asInt = from0x(usdc);
-        expect(to0xAddress(asInt)).to.equal(usdc.toLowerCase());
+        const asInt = from0x(USDC);
+        expect(to0xAddress(asInt)).to.equal(USDC.toLowerCase());
     })
 
     it('toUint()', () => {

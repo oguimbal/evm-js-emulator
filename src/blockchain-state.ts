@@ -131,15 +131,15 @@ class BlockchainState implements ExecState {
         return this._changeStorage(this.current0x, s => s.set(location, value));
     }
 
-    async transfer(_to: UInt256, value: UInt256): Promise<BlockchainState> {
+    async transferFrom(_from: UInt256, _to: UInt256, value: UInt256): Promise<BlockchainState> {
         if (value.eq(0)) {
             return this;
         }
-        const from = this.current0x;
+        const from = to0xAddress(_from);
         const to = to0xAddress(_to);
 
         // check has enough funds
-        const fromBalance = await this.getBalance();
+        const fromBalance = await this.getStorageOf(from).getBalance();
         if (fromBalance.lt(value)) {
             throw new Error(`Insufficient balance in ${from} to transfer ${dumpU256(value)} to ${to}`);
         }
@@ -148,6 +148,17 @@ class BlockchainState implements ExecState {
         return this._changeStorage(from, s => s.decrementBalance(value))
             ._changeStorage(to, s => s.incrementBalance(value));
     }
+
+
+    transfer(_to: UInt256, value: UInt256): Promise<BlockchainState> {
+        return this.transferFrom(this.stack.currentStorageCtx, _to, value);
+    }
+
+    mintValue(toAddress: UInt256, value: UInt256) {
+        return this._changeStorage(to0xAddress(toAddress), s => s.incrementBalance(value));
+    }
+
+
 
     decrementGas(num: number | UInt256): void {
         // TODO implement gas properly
@@ -158,7 +169,7 @@ class BlockchainState implements ExecState {
         // this.stack.gas.sub(num, true);
     }
 
-    newTx(data: NewTxData): ExecState {
+    async newTx(data: NewTxData): Promise<ExecState> {
         if (this.store.callStack.size) {
             throw new Error('A tx is already being executed');
         }
@@ -173,13 +184,15 @@ class BlockchainState implements ExecState {
             retdatasize: data.retdatasize,
             static: data.static,
         };
-        return new BlockchainState(this.store
+        let ret = new BlockchainState(this.store
             .set('currentTx', {
                 timestamp: data.timestamp,
                 gasPrice: data.gasPrice,
                 origin: data.origin,
             })
-        ).pushCallStack(full);
+        )
+        ret = await ret.transferFrom(full.caller, full.address, full.callValue)
+        return ret.pushCallStack(full);
     }
 
     private pushCallStack(stack: Partial<Stack>): ExecState {

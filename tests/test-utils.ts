@@ -43,10 +43,14 @@ export function newDeployTxData(data?: Partial<NewTxData>): Omit<NewTxData, 'con
 }
 
 
-export async function executeBytecode(ops: string | number[], opts?: Partial<NewTxData>) {
+export async function executeBytecode(ops: string | number[], opts?: Partial<NewTxData>, mintSenderBalance?: UInt256) {
     const session = new Session(TEST_SESSION_OPTS);
     const contract = session.deployRaw(typeof ops === 'string' ? parseBuffer(ops) : Buffer.from(ops));
-    const exec = await session.prepareCall(newTxData(contract, opts));
+    const txData = newTxData(contract, opts);
+    if (mintSenderBalance) {
+        session.state = session.state.mintValue(txData.origin, mintSenderBalance);
+    }
+    const exec = await session.prepareCall(txData);
     const buffer = await execWatchInstructions(exec);
     return {
         result: [...buffer ?? []],
@@ -58,8 +62,8 @@ function watchInstructions(exec: IExecutor) {
     const cname = exec.contractName;
     let inContinue = false;
     exec.watch((_, __, name, spy, seq) => {
-        if (cname === 'nvm') {
-            if (seq === 'CONTINUE') { // ignore "continue" known sequence in NVM
+        if (cname === 'hyvm') {
+            if (seq === 'CONTINUE') { // ignore "continue" known sequence in HyVM
                 if (!inContinue) {
                     console.log(' -> CONTINUE()');
                 }

@@ -66,7 +66,7 @@ export interface ExecState {
     readonly session: ISession;
 
 
-    newTx(data: NewTxData): ExecState;
+    newTx(data: NewTxData): Promise<ExecState>;
 
     decrementGas(num: number | UInt256): void;
 
@@ -78,6 +78,8 @@ export interface ExecState {
     setStorage(location: UInt256, value: UInt256): ExecState;
     setStorageLocation(address: UInt256, storage: IStorage): ExecState;
     transfer(to: UInt256, value: UInt256): Promise<ExecState>;
+    /** Augment to given address with the given ETH value (use for tests) */
+    mintValue(to: UInt256, value: UInt256): ExecState;
 
     // call stack
     pushCallTo(contract: UInt256, callValue: UInt256, calldata: Uint8Array, returnDataSize: number, gasLimit: UInt256): Promise<ExecState>;

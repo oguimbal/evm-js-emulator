@@ -78,7 +78,7 @@ export class Session implements ISession {
 
     async prepareCall(input: NewTxData): Promise<IExecutor> {
         const code = await this.getContract(input.contract);
-        const exec = new Executor(this.state.newTx(input), code);
+        const exec = new Executor(await this.state.newTx(input), code);
         exec.onResult(ret => {
             if (!isFailure(ret)) {
                 this.state = ret.newState.popCallStack();
