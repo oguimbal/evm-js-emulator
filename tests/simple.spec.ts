@@ -392,6 +392,16 @@ describe('Simple opcodes', () => {
         expect(exec.popAsNum()).to.equal(123);
     });
 
+    it('byte', async () => {
+        const { exec } = await executeBytecode([
+            0x61, 0xff, 0x00, // push2 0xff00
+            0x60, 30, // push1 30
+            0x1a, // BYTE
+        ]);
+        expect(exec.popAsNum()).to.equal(0xff);
+    });
+
+
     it('dup1', async () => {
         const { exec } = await executeBytecode([
             0x60, 1, // push1 1

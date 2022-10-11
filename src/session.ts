@@ -33,6 +33,19 @@ export class Session implements ISession {
         }
     }
 
+    addNames(names?: SessionOpts['contractsNames']) {
+        if (!names) {
+            return this;
+        }
+        this.opts ??= {};
+        this.opts.contractsNames = {
+            ...this.opts.contractsNames,
+            ...Object.fromEntries(Object.entries(names)
+                .map(([k, v]) => [k.toLowerCase(), v])),
+        }
+        return this;
+    }
+
     /** Run deployment contract */
     async deploy(code: string | Buffer | Uint8Array, opts: Omit<NewTxData, 'contract'>, deployOpts?: DeployOpts) {
         // create a memory storage, that will be the deployed contract storage
@@ -112,7 +125,7 @@ export class Session implements ISession {
         let compiled = this.contracts.get(key);
         if (!compiled) {
             const code = await this.getBytecodeFromCache(key);
-            compiled = compileCode(code,this.opts?.contractsNames?.[key], contract);
+            compiled = compileCode(code, this.opts?.contractsNames?.[key], contract);
             this.contracts.set(key, compiled);
         }
         return compiled!;

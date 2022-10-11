@@ -1,3 +1,4 @@
+import { utils } from 'ethers';
 import type { UInt256 } from './uint256';
 
 export interface IStorage {
@@ -12,6 +13,7 @@ export interface IStorage {
 export type CompiledCode = ((exec: IExecutor) => () => void) & {
     readonly code: IMemReader;
     readonly contractName: string;
+    readonly contractAbi: utils.Interface | undefined;
     readonly contractAddress: UInt256;
 };
 
@@ -94,7 +96,7 @@ export interface SessionOpts {
     rpcUrl?: string;
     /** Discard RPC cache after this period (defaults to 1 day) */
     maxRpcCacheTime?: number;
-    contractsNames?: { [key: string]: string };
+    contractsNames?: { [key: string]: string | { name: string; abi: utils.Interface } };
 }
 
 export interface ISession {
@@ -103,6 +105,7 @@ export interface ISession {
     getContract(contract: HexString | UInt256): Promise<CompiledCode>;
     prepareCall(input: NewTxData): Promise<IExecutor>;
     prepareStaticCall(contract: HexString | UInt256, calldata: string | Uint8Array, returnDataSize: number): Promise<IExecutor>;
+    addNames(names?: SessionOpts['contractsNames']): this;
 }
 
 
@@ -123,6 +126,7 @@ export function isFailure(result: StopReason): result is Revert {
 
 export interface IExecutor {
     readonly contractName: string;
+    readonly contractAbi: utils.Interface | undefined;
     readonly state: ExecState;
     readonly contractAddress: UInt256;
     readonly stack: readonly UInt256[];

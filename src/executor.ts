@@ -4,6 +4,7 @@ import { Memory } from './memory';
 import { UInt256, U256 } from './uint256';
 import { dumpU256, shaOf, toNumberSafe, toUint } from './utils';
 import { Buffer } from 'buffer';
+import { utils } from 'ethers';
 
 const ZERO = U256(0);
 
@@ -34,6 +35,12 @@ export class Executor implements IExecutor {
         return this.code.contractName ?? dumpU256(this.code.contractAddress);
     }
 
+
+    get contractAbi(): utils.Interface | undefined {
+        return this.code.contractAbi;
+    }
+
+
     get contractAddress(): UInt256 {
         return this.code.contractAddress;
     }
@@ -41,7 +48,6 @@ export class Executor implements IExecutor {
     //  private contract: ContractState, private opts: ExecutionOptions
     constructor(public state: ExecState, private code: CompiledCode) {
         this.run = code(this);
-
     }
 
     async execute(): Promise<StopReason> {
@@ -298,7 +304,9 @@ export class Executor implements IExecutor {
     }
     op_byte() {
         this.state.decrementGas(3);
-        this.push(U256(this.pop().toByteArray()[this.popAsNum()] ?? 0));
+        const i = this.popAsNum();
+        const x = this.pop().toByteArray();
+        this.push(U256(x[i]));
     }
     op_shl() {
         this.state.decrementGas(3);

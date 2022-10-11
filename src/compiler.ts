@@ -1,3 +1,4 @@
+import { utils } from 'ethers';
 import keccak256 from 'keccak256';
 import { Executor, ops } from './executor';
 import { CompiledCode, HexString } from './interfaces';
@@ -15,8 +16,11 @@ type CP = {
 };
 type Ret = 'always' | 'maybe' | 'no';
 
+type Nm = string | Def | null | undefined
+type Def = { name: string; abi?: utils.Interface};
+
 export function compileCode(contractCode: Uint8Array
-    , _contractName: string | null | undefined | ((address: HexString) => string | null | undefined)
+    , _def: Nm | ((address: HexString) => Nm)
     , forceAddress?: UInt256
     , knownSequences?: KnownSequence[]): CompiledCode {
 
@@ -29,9 +33,13 @@ export function compileCode(contractCode: Uint8Array
 
     // compute final code
     const address = forceAddress ?? generateAddress(contractCode);
-    const contractName = typeof _contractName === 'string'
-        ? _contractName
-        : _contractName?.(to0xAddress(address));
+    const defGot = typeof _def === 'function'
+        ? _def(to0xAddress(address))
+        : _def;
+    const def: Def | null | undefined = typeof defGot === 'string'
+        ? { name: defGot }
+        : defGot;
+    const contractName = def?.name;
     const hasAsync = codeParts.some(c => c.isAsync);
 
     const label = contractName ? `${contractName}_label_` : 'label_';
@@ -96,6 +104,7 @@ ${contractName ?? 'entry'} // return the program entry`);
     bind.code = new MemReader(contractCode);
     bind.contractName = contractName ?? null;
     bind.contractAddress = address;
+    bind.contractAbi = def?.abi;
     return bind;
 }
 

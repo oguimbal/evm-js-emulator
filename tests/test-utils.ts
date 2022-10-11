@@ -92,14 +92,14 @@ function watchInstructions(exec: IExecutor) {
         console.log(`VALUE: 0x${dumpU256(newExec.state.callvalue)}`);
         const calldata = newExec.dumpCalldata();
         const key = to0xAddress(newExec.contractAddress);
-        const known = KNOWN_CONTRACT.find(c => c.address === key);
-        if (known?.abi && calldata[0]?.length >= 8) {
+        const knownAbi = newExec.contractAbi ?? KNOWN_CONTRACT.find(c => c.address === key)?.abi;
+        if (knownAbi && calldata[0]?.length >= 8) {
 
             const raw = '0x' + calldata.join('');
             const sig = raw.substring(0, 10);
             try {
-                const fn = known.abi.getFunction(sig);
-                const args = fn && known.abi.decodeFunctionData(fn, raw);
+                const fn = knownAbi.getFunction(sig);
+                const args = fn && knownAbi.decodeFunctionData(fn, raw);
                 if (fn && args) {
                     const argDump = !args.length ? '()' : `\n         -> ${args.join(',\n         -> ')}`;
                     console.log(`DECODED CALLDATA:\n    ${fn.name}${argDump}`);
