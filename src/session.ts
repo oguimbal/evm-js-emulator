@@ -8,7 +8,7 @@ import { CompiledCode, ExecState, NewTxData, HexString, IExecutor, ISession, isF
 import { RPC } from './rpc';
 import { MemStorage } from './storage';
 import { U256, UInt256 } from './uint256';
-import { from0x, getNodejsLibs, parseBuffer, to0xAddress, toUint } from './utils';
+import { from0x, getNodejsLibs, parseBuffer, to0xAddress, toAddress, toUint } from './utils';
 
 interface DeployOpts {
     balance?: UInt256;
@@ -100,11 +100,11 @@ export class Session implements ISession {
         return exec;
     }
 
-    async prepareStaticCall(contract: HexString | UInt256, calldata: string | Uint8Array, returndatasize: number) {
+    async prepareStaticCall(_contract: HexString | UInt256, calldata: string | Uint8Array, returndatasize: number) {
         if (typeof calldata === 'string') {
             calldata = parseBuffer(calldata.startsWith('0x') ? calldata.substring(2) : calldata);
         }
-        contract = typeof contract === 'string' ? from0x(contract) : contract
+        const contract = toAddress(_contract);
 
         return this.prepareCall({
             contract,
@@ -119,8 +119,8 @@ export class Session implements ISession {
         })
     }
 
-    async getContract(contract: HexString | UInt256) {
-        contract = typeof contract === 'string' ? from0x(contract) : contract
+    async getContract(_contract: HexString | UInt256) {
+        const contract = toAddress(_contract);
         const key = this.contractKey(contract);
         let compiled = this.contracts.get(key);
         if (!compiled) {
@@ -155,6 +155,6 @@ export class Session implements ISession {
     }
 
     private contractKey(contract: HexString | UInt256) {
-        return to0xAddress(typeof contract === 'string' ? from0x(contract) : contract);
+        return to0xAddress(toAddress(contract));
     }
 }

@@ -32,9 +32,14 @@ export function deriveU256FromBuffer(buffer: Uint8Array | Buffer, zerosUntil = 0
     return U256(ab);
 }
 
-export function to0xAddress(address: UInt256): HexString {
-    // const ret = dumpU256(address);
-    const ret = address.toString(16).substring(0, 40);
+const address_mask = toUint('000000000000000000000000FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF');
+export function toAddress(_address: HexString | UInt256) {
+    const address = typeof _address === 'string' ? from0x(_address) : _address;
+    return address.and(address_mask);
+}
+
+export function to0xAddress(address: HexString | UInt256): HexString {
+    const ret = toAddress(address).toString(16);
     return `0x${ret.padStart(40, '0')}`;
 }
 
