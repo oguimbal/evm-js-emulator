@@ -34,10 +34,7 @@ export function deriveU256FromBuffer(buffer: Uint8Array | Buffer, zerosUntil = 0
 
 export function to0xAddress(address: UInt256): HexString {
     // const ret = dumpU256(address);
-    const ret = address.toString(16);
-    if (!/^0*[a-fA-F\d]{0,40}$/.test(ret)) {
-        throw new Error(`Not an address: ${ret}`);
-    }
+    const ret = address.toString(16).substring(0, 40);
     return `0x${ret.padStart(40, '0')}`;
 }
 
