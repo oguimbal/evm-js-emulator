@@ -56,6 +56,80 @@ describe('Simple opcodes', () => {
     });
 
 
+    describe('signextend', () => {
+
+
+        it('0xFF - 0', async () => {
+            const { exec } = await executeBytecode([
+                0x60, 0xFF, // push1 0xFF
+                0x60, 0, // push1 0
+                0x0b, // signextend
+            ]);
+
+            expect(dumpU256(exec.pop())).to.equal('ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff');
+        });
+
+        it('0xFA - 0', async () => {
+            const { exec } = await executeBytecode([
+                0x60, 0xFA, // push1 0xFA
+                0x60, 0, // push1 0
+                0x0b, // signextend
+            ]);
+
+            expect(dumpU256(exec.pop())).to.equal('fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffa');
+        });
+
+        it('0x81 - 0', async () => {
+            const { exec } = await executeBytecode([
+                0x60, 0x81, // push1 0x81
+                0x60, 0, // push1 0
+                0x0b, // signextend
+            ]);
+
+            expect(dumpU256(exec.pop())).to.equal('ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff81');
+        });
+
+        it('0x7F - 0', async () => {
+            const { exec } = await executeBytecode([
+                0x60, 0x7F, // push1 0x7F
+                0x60, 0, // push1 0
+                0x0b, // signextend
+            ]);
+
+            expect(dumpU256(exec.pop())).to.equal('7f');
+        });
+
+        it('0xaa7F - 0', async () => {
+            const { exec } = await executeBytecode([
+                0x61, 0xaa, 0x7F, // push2 0xaa7F
+                0x60, 0, // push1 0
+                0x0b, // signextend
+            ]);
+
+            expect(dumpU256(exec.pop())).to.equal('7f');
+        });
+
+        it('0xFFFF - 1', async () => {
+            const { exec } = await executeBytecode([
+                0x61, 0xFF, 0xFF, // push2 0xFFFF
+                0x60, 1, // push1 1
+                0x0b, // signextend
+            ]);
+
+            expect(dumpU256(exec.pop())).to.equal('ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff');
+        });
+
+        it('0x7FAA - 1', async () => {
+            const { exec } = await executeBytecode([
+                0x61, 0x7F, 0xAA, // push2 0x7FAA
+                0x60, 1, // push1 1
+                0x0b, // signextend
+            ]);
+
+            expect(dumpU256(exec.pop())).to.equal('7faa');
+        });
+    })
+
 
     it('calldataload inside', async () => {
         const { exec } = await executeBytecode([

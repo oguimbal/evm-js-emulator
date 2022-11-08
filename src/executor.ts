@@ -256,7 +256,22 @@ export class Executor implements IExecutor {
     }
     op_signextend() {
         this.state.decrementGas(3);
-        throw new Error('not implemented: signextend');
+        // https://ethereum.stackexchange.com/questions/63062/evm-signextend-opcode-explanation
+        const b = this.popAsNum();
+        const x = this.pop();
+        const leftMost = (b + 1) * 8 - 1;
+        const isNeg = x.testBit(leftMost);
+        const copy = x.copy();
+        if (isNeg) {
+            for (let i = leftMost; i < 256; i++) {
+                copy.setBit(i, true);
+            }
+        } else {
+            for (let i = leftMost; i < 256; i++) {
+                copy.clearBit(i, true);
+            }
+        }
+        this.push(copy);
     }
     op_unused() {
         this.state.decrementGas(3);
