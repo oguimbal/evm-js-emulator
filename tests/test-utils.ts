@@ -92,7 +92,6 @@ function watchInstructions(exec: IExecutor, level: number) {
     if (!level) {
         return;
     }
-    showWelcome(exec);
     const cname = exec.contractName;
     let inContinue = false;
     exec.watch((_, __, name, spy, seq) => {
@@ -146,7 +145,11 @@ function watchInstructions(exec: IExecutor, level: number) {
 
 
 export async function execWatchInstructions(exec: IExecutor, depth?: number): Promise<Uint8Array | null> {
-    watchInstructions(exec, depth ??= 9999999999999);
+    depth ??= 9999999999999
+    if (depth) {
+        showWelcome(exec);
+    }
+    watchInstructions(exec, depth);
     const ret = await exec.execute();
     if (!isSuccess(ret)) {
         throw new Error(`Stopped (${ret.type})`);
