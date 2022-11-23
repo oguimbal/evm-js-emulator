@@ -59,10 +59,40 @@ export async function executeBytecode(ops: string | number[], opts?: Partial<New
     };
 }
 
+function showWelcome(newExec: IExecutor) {
+    console.log(`ADDRESS: ${to0xAddress(newExec.state.address)}`);
+    console.log(`CALLER: ${to0xAddress(newExec.state.caller)}`);
+    console.log(`ORIGIN: ${to0xAddress(newExec.state.origin)}`);
+    console.log(`GAS: 0x${dumpU256(newExec.state.gas)}`);
+    console.log(`VALUE: 0x${dumpU256(newExec.state.callvalue)}`);
+    const calldata = newExec.dumpCalldata();
+    const key = to0xAddress(newExec.contractAddress);
+    const knownAbi = newExec.contractAbi ?? KNOWN_CONTRACT.find(c => c.address === key)?.abi;
+    if (knownAbi && calldata[0]?.length >= 8) {
+
+        const raw = '0x' + calldata.join('');
+        const sig = raw.substring(0, 10);
+        try {
+            const fn = knownAbi.getFunction(sig);
+            const args = fn && knownAbi.decodeFunctionData(fn, raw);
+            if (fn && args) {
+                const argDump = !args.length ? '()' : `\n         -> ${args.join(',\n         -> ')}`;
+                console.log(`DECODED CALLDATA:\n    ${fn.name}${argDump}`);
+            } else {
+                console.log(`💥 FAILED TO DECODE CALLDATA !`);
+            }
+        } catch (e: any) {
+            console.log(`💥 FAILED TO DECODE CALLDATA (${e.message}) !`);
+        }
+    }
+    console.log(`CALLDATA: \n    ${calldata.join('\n    ') || '<empty>'}\n`)
+}
+
 function watchInstructions(exec: IExecutor, level: number) {
     if (!level) {
         return;
     }
+    showWelcome(exec);
     const cname = exec.contractName;
     let inContinue = false;
     exec.watch((_, __, name, spy, seq) => {
@@ -89,32 +119,8 @@ function watchInstructions(exec: IExecutor, level: number) {
     exec.onStartingCall((newExec, type) => {
         watchInstructions(newExec, level - 1);
         console.log(`========== stack activity: ${type} 🔜 ${newExec.contractName} (from ${cname}) ==============`);
-        console.log(`ADDRESS: ${to0xAddress(newExec.state.address)}`);
-        console.log(`CALLER: ${to0xAddress(newExec.state.caller)}`);
-        console.log(`ORIGIN: ${to0xAddress(newExec.state.origin)}`);
-        console.log(`GAS: 0x${dumpU256(newExec.state.gas)}`);
-        console.log(`VALUE: 0x${dumpU256(newExec.state.callvalue)}`);
-        const calldata = newExec.dumpCalldata();
-        const key = to0xAddress(newExec.contractAddress);
-        const knownAbi = newExec.contractAbi ?? KNOWN_CONTRACT.find(c => c.address === key)?.abi;
-        if (knownAbi && calldata[0]?.length >= 8) {
+        showWelcome(newExec);
 
-            const raw = '0x' + calldata.join('');
-            const sig = raw.substring(0, 10);
-            try {
-                const fn = knownAbi.getFunction(sig);
-                const args = fn && knownAbi.decodeFunctionData(fn, raw);
-                if (fn && args) {
-                    const argDump = !args.length ? '()' : `\n         -> ${args.join(',\n         -> ')}`;
-                    console.log(`DECODED CALLDATA:\n    ${fn.name}${argDump}`);
-                } else {
-                    console.log(`💥 FAILED TO DECODE CALLDATA !`);
-                }
-            } catch (e: any) {
-                console.log(`💥 FAILED TO DECODE CALLDATA (${e.message}) !`);
-            }
-        }
-        console.log(`CALLDATA: \n    ${calldata.join('\n    ') || '<empty>'}\n`)
     });
     exec.onEndingCall((exec, type, success, stop) => {
         console.log(`========== stack activity: ${success ? '✅' : '💥'} back to ${cname} (end of op "${type}" => ${stop?.type ?? 'unknown error'}) ==============`);
