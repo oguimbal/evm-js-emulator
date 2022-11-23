@@ -59,7 +59,10 @@ export async function executeBytecode(ops: string | number[], opts?: Partial<New
     };
 }
 
-function watchInstructions(exec: IExecutor, firstLevelOnly?: boolean) {
+function watchInstructions(exec: IExecutor, level: number) {
+    if (!level) {
+        return;
+    }
     const cname = exec.contractName;
     let inContinue = false;
     exec.watch((_, __, name, spy, seq) => {
@@ -84,9 +87,7 @@ function watchInstructions(exec: IExecutor, firstLevelOnly?: boolean) {
     //     console.log(msg);
     // });
     exec.onStartingCall((newExec, type) => {
-        if (!firstLevelOnly) {
-            watchInstructions(newExec);
-        }
+        watchInstructions(newExec, level - 1);
         console.log(`========== stack activity: ${type} 🔜 ${newExec.contractName} (from ${cname}) ==============`);
         console.log(`ADDRESS: ${to0xAddress(newExec.state.address)}`);
         console.log(`CALLER: ${to0xAddress(newExec.state.caller)}`);
@@ -138,10 +139,8 @@ function watchInstructions(exec: IExecutor, firstLevelOnly?: boolean) {
 
 
 
-export async function execWatchInstructions(exec: IExecutor, opts?: { noWatch?: boolean; firstLevelOnly?: boolean; }): Promise<Uint8Array | null> {
-    if (!opts?.noWatch) {
-        watchInstructions(exec, opts?.firstLevelOnly);
-    }
+export async function execWatchInstructions(exec: IExecutor, depth?: number): Promise<Uint8Array | null> {
+    watchInstructions(exec, depth ??= 9999999999999);
     const ret = await exec.execute();
     if (!isSuccess(ret)) {
         throw new Error(`Stopped (${ret.type})`);
