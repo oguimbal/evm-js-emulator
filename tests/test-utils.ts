@@ -1,11 +1,12 @@
 import { NewTxData, IExecutor, isSuccess, SessionOpts, ISession, HexString } from '../src/interfaces';
 import { U256, UInt256 } from '../src/uint256';
 import { Buffer } from 'buffer';
-import { dumpU256, MAX_UINT, parseBuffer, to0xAddress, toUint } from '../src/utils';
+import { dumpU256, MAX_UINT, parseBuffer, to0xAddress, toNumberSafe, toUint } from '../src/utils';
 import { KNOWN_CONTRACT, USDC } from './known-contracts';
 import { utils } from 'ethers';
 import { Session } from '../src/session';
 import { assert, expect } from 'chai';
+import { setStorageInstance } from '../src/blockchain-state';
 export * from './known-contracts';
 
 
@@ -193,7 +194,7 @@ export function toUintBuffer(txt: string) {
 }
 
 
-export async function balanceOf(session: ISession, address: string | HexString | UInt256, watch?: boolean) {
+export async function balanceOfUsdc(session: ISession, address: string | HexString | UInt256, watch?: boolean) {
     if (typeof address !== 'string') {
         address = dumpU256(address).padStart(40, '0');
     }
@@ -213,14 +214,28 @@ export async function balanceOf(session: ISession, address: string | HexString |
     return toUint(result!);
 }
 
-export const HAS_USDC = toUint('0x524a464e53208c1f87f6d56119acb667d042491a');
-export async function transferUsdcTo(session: ISession, address: string | HexString | UInt256, qty: UInt256, watch?: boolean) {
+export async function balanceOf(session: ISession, address: UInt256): Promise<UInt256> {
+    const ret = await session.state.getStorageOf(address).getBalance();
+    return ret;
+}
+
+export function balanceOfNum(session: ISession, address: UInt256): Promise<number> {
+    return balanceOf(session, address).then(n => toNumberSafe(n));
+}
+
+function addressToStr(address:string | HexString | UInt256): string {
     if (typeof address !== 'string') {
         address = dumpU256(address).padStart(40, '0');
     }
     if (address.startsWith('0x')) {
         address = address.substring(2);
     }
+    return address;
+}
+
+export const HAS_USDC = toUint('0x524a464e53208c1f87f6d56119acb667d042491a');
+export async function transferUsdcTo(session: ISession, address: string | HexString | UInt256, qty: UInt256, watch?: boolean) {
+    address = addressToStr(address);
     const exec = await session.prepareCall(newTxData(toUint(USDC), {
         // 5f5e100
         calldata: parseBuffer(`0xa9059cbb000000000000000000000000${address}${dumpU256(qty).padStart(64, '0')}`),
@@ -232,4 +247,10 @@ export async function transferUsdcTo(session: ISession, address: string | HexStr
         const opResult = await exec.execute();
         assert.isTrue(isSuccess(opResult));
     }
+}
+
+export async function transferEthTo(session: ISession, address: string | HexString | UInt256, qty: UInt256) {
+    address = toUint(address);
+    const storage = session.state.getStorageOf(address);
+    setStorageInstance(session.state, address, storage.incrementBalance(qty));
 }
