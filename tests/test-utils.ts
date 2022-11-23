@@ -59,7 +59,7 @@ export async function executeBytecode(ops: string | number[], opts?: Partial<New
     };
 }
 
-function watchInstructions(exec: IExecutor) {
+function watchInstructions(exec: IExecutor, firstLevelOnly?: boolean) {
     const cname = exec.contractName;
     let inContinue = false;
     exec.watch((_, __, name, spy, seq) => {
@@ -84,7 +84,9 @@ function watchInstructions(exec: IExecutor) {
     //     console.log(msg);
     // });
     exec.onStartingCall((newExec, type) => {
-        watchInstructions(newExec);
+        if (!firstLevelOnly) {
+            watchInstructions(newExec);
+        }
         console.log(`========== stack activity: ${type} 🔜 ${newExec.contractName} (from ${cname}) ==============`);
         console.log(`ADDRESS: ${to0xAddress(newExec.state.address)}`);
         console.log(`CALLER: ${to0xAddress(newExec.state.caller)}`);
@@ -136,9 +138,9 @@ function watchInstructions(exec: IExecutor) {
 
 
 
-export async function execWatchInstructions(exec: IExecutor, noWatch?: boolean): Promise<Uint8Array | null> {
-    if (!noWatch) {
-        watchInstructions(exec);
+export async function execWatchInstructions(exec: IExecutor, opts?: { noWatch?: boolean; firstLevelOnly?: boolean; }): Promise<Uint8Array | null> {
+    if (!opts?.noWatch) {
+        watchInstructions(exec, opts?.firstLevelOnly);
     }
     const ret = await exec.execute();
     if (!isSuccess(ret)) {
@@ -223,7 +225,7 @@ export function balanceOfNum(session: ISession, address: UInt256): Promise<numbe
     return balanceOf(session, address).then(n => toNumberSafe(n));
 }
 
-function addressToStr(address:string | HexString | UInt256): string {
+function addressToStr(address: string | HexString | UInt256): string {
     if (typeof address !== 'string') {
         address = dumpU256(address).padStart(40, '0');
     }

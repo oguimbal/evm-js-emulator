@@ -28,7 +28,7 @@ describe('HyVM executions', () => {
                 ? parseBuffer(bytecode)
                 : bytecode,
         }));
-        return await execWatchInstructions(exec, noWatch);
+        return await execWatchInstructions(exec, { noWatch });
     }
 
     it('add', async () => {

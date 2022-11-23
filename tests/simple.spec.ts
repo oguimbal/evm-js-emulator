@@ -18,6 +18,15 @@ describe('Simple opcodes', () => {
 
         expect(exec.popAsNum()).to.equal(3);
     });
+    it('overflowing add', async () => {
+        const { exec } = await executeBytecode([
+            0x7f, ...toUint('0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff').toByteArray(), // push32
+            0x60, 0x2, // push1 2
+            0x1, // add
+        ]);
+
+        expect(exec.popAsNum()).to.equal(1);
+    });
     it('mul', async () => {
         const { exec } = await executeBytecode([
             0x60, 0x2, // push1 2
@@ -27,6 +36,16 @@ describe('Simple opcodes', () => {
 
         expect(exec.popAsNum()).to.equal(6);
     });
+    it('overflowing mul', async () => {
+        const { exec } = await executeBytecode([
+            // this is "0xffff.../2 + 3", which, multiplied by 2, will be 4
+            0x7f, ...toUint('0x8000000000000000000000000000000000000000000000000000000000000002').toByteArray(), // push32
+            0x60, 0x2, // push1 3
+            0x2, // mul
+        ]);
+
+        expect(exec.popAsNum()).to.equal(4);
+    });
     it('sub', async () => {
         const { exec } = await executeBytecode([
             0x60, 0x1, // push1 2
@@ -35,6 +54,15 @@ describe('Simple opcodes', () => {
         ]);
 
         expect(exec.popAsNum()).to.equal(2);
+    });
+    it('overflowing sub', async () => {
+        const { exec } = await executeBytecode([
+            0x60, 0x4, // push1 4
+            0x60, 0x3, // push1 3
+            0x3, // sub
+        ]);
+
+        expect(exec.pop()).to.deep.equal(toUint('0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'));
     });
     it('div 1', async () => {
         const { exec } = await executeBytecode([
