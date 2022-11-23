@@ -88,9 +88,9 @@ function showWelcome(newExec: IExecutor) {
     console.log(`CALLDATA: \n    ${calldata.join('\n    ') || '<empty>'}\n`)
 }
 
-function watchInstructions(exec: IExecutor, level: number) {
+function watchInstructions(exec: IExecutor, level: number): boolean {
     if (!level) {
-        return;
+        return false;
     }
     const cname = exec.contractName;
     let inContinue = false;
@@ -116,17 +116,31 @@ function watchInstructions(exec: IExecutor, level: number) {
     //     console.log(msg);
     // });
     exec.onStartingCall((newExec, type) => {
-        watchInstructions(newExec, level - 1);
-        console.log(`========== stack activity: ${type} 🔜 ${newExec.contractName} (from ${cname}) ==============`);
+        if (!watchInstructions(newExec, level - 1)) {
+            subscribeShowResult(newExec, false);
+            console.log(` -----> Not logged child call ${type} 🔜 ${newExec.contractName}`);
+        } else {
+            console.log(`========== stack activity: ${type} 🔜 ${newExec.contractName} (from ${cname}) ==============`);
+        }
         showWelcome(newExec);
 
     });
+
+    subscribeShowResult(exec, true);
+    return true;
+}
+
+function subscribeShowResult(exec: IExecutor, fullyLogged: boolean) {
     exec.onEndingCall((exec, type, success, stop) => {
-        console.log(`========== stack activity: ${success ? '✅' : '💥'} back to ${cname} (end of op "${type}" => ${stop?.type ?? 'unknown error'}) ==============`);
+        if (fullyLogged) {
+            console.log(`========== stack activity: ${success ? '✅' : '💥'} back to ${exec.contractName} (end of op "${type}" => ${stop?.type ?? 'unknown error'}) ==============`);
+        } else {
+            console.log(` -> sub call ended  ${success ? '✅' : '💥'}  ${stop?.type ?? 'unknown error'}`);
+        }
     });
     exec.onResult(r => {
         const hexData = 'data' in r ? Buffer.from(r.data ?? []).toString('hex') : '';
-        console.log(`[${cname}] => ${r.type} ${hexData}`);
+        console.log(`[${exec.contractName}] => ${r.type} ${hexData}`);
 
         // try to decode revert errrors
         if (r.type === 'revert' && r.data && r.data.length % 32 === 4 && r.data.length > 4) {
