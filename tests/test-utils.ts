@@ -5,7 +5,6 @@ import { dumpU256, MAX_UINT, parseBuffer, to0xAddress, toNumberSafe, toUint } fr
 import { KNOWN_CONTRACT, USDC } from './known-contracts';
 import { utils } from 'ethers';
 import { Session } from '../src/session';
-import { assert, expect } from 'chai';
 import { setStorageInstance } from '../src/blockchain-state';
 export * from './known-contracts';
 
@@ -118,7 +117,7 @@ function watchInstructions(exec: IExecutor, level: number): boolean {
     exec.onStartingCall((newExec, type) => {
         if (!watchInstructions(newExec, level - 1)) {
             subscribeShowResult(newExec, false);
-            console.log(` -----> Not logged child call ${type} 🔜 ${newExec.contractName}`);
+            console.log(` -----> Not logged child ${type} 🔜 ${newExec.contractName}`);
         } else {
             console.log(`========== stack activity: ${type} 🔜 ${newExec.contractName} (from ${cname}) ==============`);
         }
@@ -231,10 +230,14 @@ export async function balanceOfUsdc(session: ISession, address: string | HexStri
         result = await execWatchInstructions(exec);
     } else {
         const opResult = await exec.execute();
-        assert.isTrue(isSuccess(opResult));
+        if (!isSuccess(opResult)) {
+            throw new Error('Expected execution success');
+        }
         result = opResult.data ?? null;
     }
-    expect(result?.length).to.equal(32);
+    if (result?.length !== 32) {
+        throw new Error(`Expected a 32 bytes value, but got ${result?.length ?? 0} bytes`);
+    }
     return toUint(result!);
 }
 
@@ -269,7 +272,9 @@ export async function transferUsdcTo(session: ISession, address: string | HexStr
         await execWatchInstructions(exec);
     } else {
         const opResult = await exec.execute();
-        assert.isTrue(isSuccess(opResult));
+        if (!isSuccess(opResult)) {
+            throw new Error('Expected execution success');
+        }
     }
 }
 
