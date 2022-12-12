@@ -135,6 +135,7 @@ export interface IExecutor {
     watch(handler: (opcode: number, opName: string, paddedOpName: string, opSpy: string[], inKnownSequence: string | null) => any): void;
     onMemChange(fn: (bytes: () => number[]) => void): void;
     onStartingCall(fn: OnStartingCall): void;
+    onLog(fn: OnLog): void;
     onEndingCall(fn: OnEndedCall): void;
     onResult(handler: (ret: StopReason) => void): void;
     pop(): UInt256;
@@ -147,6 +148,7 @@ export interface IExecutor {
 
 export type OnStartingCall = (exec: IExecutor, callType: 'call' | 'callcode' | 'staticcall' | 'delegatecall') => void;
 export type OnEndedCall = (exec: IExecutor, callType: 'call' | 'callcode' | 'staticcall' | 'delegatecall', success: boolean, reason: StopReason | undefined) => void;
+export type OnLog = (log: Log) => void;
 export interface Log {
     readonly topics: readonly UInt256[];
     readonly data: Uint8Array;

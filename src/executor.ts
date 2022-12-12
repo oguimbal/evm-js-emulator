@@ -1,4 +1,4 @@
-import { CompiledCode, ExecState, IExecutor, IMemReader, isFailure, isSuccess, Log, OnEndedCall, OnStartingCall, StopReason } from './interfaces';
+import { CompiledCode, ExecState, IExecutor, IMemReader, isFailure, isSuccess, Log, OnEndedCall, OnLog, OnStartingCall, StopReason } from './interfaces';
 import { MemReader } from './mem-reader';
 import { Memory } from './memory';
 import { UInt256, U256 } from './uint256';
@@ -25,6 +25,7 @@ export class Executor implements IExecutor {
     private _onMemChange: ((bytes: () => number[]) => void)[] | null = null;
     private _onStartCall: OnStartingCall[] | null = null;
     private _onEndCall: OnEndedCall[] | null = null;
+    private _onLog: OnLog[] | null = null;
     private notifyMemChanged = false;
     private run: () => void;
     private lastReturndata: MemReader = new MemReader([]);
@@ -158,6 +159,12 @@ export class Executor implements IExecutor {
         this._onEndCall ??= [];
         this._onEndCall.push(fn);
     }
+
+    onLog(fn: OnLog): void {
+        this._onLog ??= [];
+        this._onLog.push(fn);
+    }
+
     onResult(handler: (ret: StopReason) => void) {
         this._onResult.push(handler);
     }
@@ -796,23 +803,33 @@ export class Executor implements IExecutor {
     }
     op_log0() {
         this.state.decrementGas(3);
-        this.logs.push({ address: this.contractAddress, data: this.getData(), topics: [], });
+        const log: Log = { address: this.contractAddress, data: this.getData(), topics: [], }
+        this.logs.push(log);
+        this._onLog?.forEach(fn => fn(log));
     }
     op_log1() {
         this.state.decrementGas(3);
-        this.logs.push({ address: this.contractAddress, data: this.getData(), topics: [this.pop()], });
+        const log: Log = { address: this.contractAddress, data: this.getData(), topics: [this.pop()], }
+        this.logs.push(log);
+        this._onLog?.forEach(fn => fn(log));
     }
     op_log2() {
         this.state.decrementGas(3);
-        this.logs.push({ address: this.contractAddress, data: this.getData(), topics: [this.pop(), this.pop()], });
+        const log: Log = { address: this.contractAddress, data: this.getData(), topics: [this.pop(), this.pop()], }
+        this.logs.push(log);
+        this._onLog?.forEach(fn => fn(log));
     }
     op_log3() {
         this.state.decrementGas(3);
-        this.logs.push({ address: this.contractAddress, data: this.getData(), topics: [this.pop(), this.pop(), this.pop()], });
+        const log: Log = { address: this.contractAddress, data: this.getData(), topics: [this.pop(), this.pop(), this.pop()], }
+        this.logs.push(log);
+        this._onLog?.forEach(fn => fn(log));
     }
     op_log4() {
         this.state.decrementGas(3);
-        this.logs.push({ address: this.contractAddress, data: this.getData(), topics: [this.pop(), this.pop(), this.pop(), this.pop()], });
+        const log: Log = { address: this.contractAddress, data: this.getData(), topics: [this.pop(), this.pop(), this.pop(), this.pop()], }
+        this.logs.push(log);
+        this._onLog?.forEach(fn => fn(log));
     }
     op_create() {
         this.state.decrementGas(3);
