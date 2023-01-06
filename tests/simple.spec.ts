@@ -83,6 +83,45 @@ describe('Simple opcodes', () => {
         expect(exec.popAsNum()).to.equal(2);
     });
 
+    it('div 0', async () => {
+        const { exec } = await executeBytecode([
+            0x60, 0, // push1 0
+            0x60, 0xc, // push1 12
+            0x4, // div
+        ]);
+
+        expect(exec.popAsNum()).to.equal(0);
+    });
+
+    it('mod 1', async () => {
+        const { exec } = await executeBytecode([
+            0x60, 0x2, // push1 2
+            0x60, 0x3, // push1 3
+            0x6, // mod
+        ]);
+
+        expect(exec.popAsNum()).to.equal(1);
+    });
+
+    it('mod 2', async () => {
+        const { exec } = await executeBytecode([
+            0x60, 0x2, // push1 2
+            0x60, 0x4, // push1 3
+            0x6, // mod
+        ]);
+
+        expect(exec.popAsNum()).to.equal(0);
+    });
+
+    it('mod 0', async () => {
+        const { exec } = await executeBytecode([
+            0x60, 0, // push1 0
+            0x60, 0xc, // push1 12
+            0x6, // mod
+        ]);
+
+        expect(exec.popAsNum()).to.equal(0);
+    });
 
     describe('signextend', () => {
 

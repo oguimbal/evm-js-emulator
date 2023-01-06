@@ -68,7 +68,7 @@ describe('HyVM executions', () => {
 
 
     // it('staticcall balanceOf', async () => {
-    //     const exec = await session.prepareStaticCall(USDC, '0x70a08231000000000000000000000000524a464e53208c1f87f6d56119acb667d042491a', 0xffff);
+    //     const exec = await session.prepareStaticCall(USDC, '0x70a08231000000000000000000000000' + HAS_USDC_RAW, 0xffff);
     //     const result = await execWatchInstructions(exec);
 
     //     // check that call has succeeded

@@ -110,7 +110,7 @@ export class Session implements ISession {
             contract,
             static: true,
             calldata,
-            origin: from0x('0x524a464e53208c1f87f6d56119acb667d042491a'),
+            origin: U256(0),
             callvalue: U256(0),
             gasLimit: toUint('ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'),
             gasPrice: U256(349834),

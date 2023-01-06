@@ -220,8 +220,10 @@ export class UInt256 {
       return lval;
     }
     rval = new UInt256(rval);
+    if (rval.eq(0)) {
+    }
     if (m.divmod(lval.buffer, rval.buffer)) {
-      throw new TypeError('DBZ');
+      rval = new UInt256(0); // dividing by zero returns 0 in the EVM
     }
     lval.buffer = rval.buffer;
     return lval.optimize();
@@ -231,13 +233,13 @@ export class UInt256 {
     rval: UInt256 | number,
     mutate: boolean = this.isMutable
   ): UInt256 {
-    const lval = (mutate && this) || this.copy();
+    let lval = (mutate && this) || this.copy();
     if (!lval.buffer) {
       return lval;
     }
     rval = new UInt256(rval);
     if (m.divmod(lval.buffer, rval.buffer)) {
-      throw new TypeError('DBZ');
+      lval = new UInt256(0); // dividing by zero returns 0 in the EVM
     }
     return lval.optimize();
   }

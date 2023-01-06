@@ -260,7 +260,8 @@ function addressToStr(address: string | HexString | UInt256): string {
     return address;
 }
 
-export const HAS_USDC = toUint('0x524a464e53208c1f87f6d56119acb667d042491a');
+export const HAS_USDC_RAW = '36d4311fed8f9a2a831b4bb06303de7fe95a3cc5'
+export const HAS_USDC = toUint('0x' + HAS_USDC_RAW);
 export async function transferUsdcTo(session: ISession, address: string | HexString | UInt256, qty: UInt256, watch?: boolean) {
     address = addressToStr(address);
     const exec = await session.prepareCall(newTxData(toUint(USDC), {

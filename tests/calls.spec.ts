@@ -1,7 +1,7 @@
 import 'mocha';
 import { assert, expect } from 'chai';
 import { Session } from '../src/session';
-import { balanceOf, balanceOfNum, balanceOfUsdc, execWatchInstructions, HAS_USDC, newDeployTxData, newTxData, TEST_SESSION_OPTS, transferEthTo, transferUsdcTo } from './test-utils';
+import { balanceOf, balanceOfNum, balanceOfUsdc, execWatchInstructions, HAS_USDC, HAS_USDC_RAW, newDeployTxData, newTxData, TEST_SESSION_OPTS, transferEthTo, transferUsdcTo } from './test-utils';
 import { U256 } from '../src/uint256';
 import { DOUBLE_SWAP, DUMMY, REENTRANT } from './bytecodes';
 import { generateAddress, parseBuffer, toNumberSafe, toUint } from '../src/utils';
@@ -33,7 +33,7 @@ describe('Calls', () => {
     })
 
     it('staticcall balanceOf', async () => {
-        const val = await balanceOfUsdc(session, '524a464e53208c1f87f6d56119acb667d042491a', true);
+        const val = await balanceOfUsdc(session, HAS_USDC_RAW, true);
         // check that this address has more than 10M USDC (6 decimals)
         assert.isTrue(val.gt(U256(10).pow(6 + 7)));
         // check that this address less 100M USDC (6 decimals)
@@ -47,7 +47,7 @@ describe('Calls', () => {
         const initialBalance = await balanceOfUsdc(session, 'b4c79dab8f259c7aee6e5b2aa729821864227e84');
         assert.isTrue(initialBalance.eq(0));
 
-        // send 1000 USDC from 0x524a464e53208c1f87f6d56119acb667d042491a to 0xb4c79dab8f259c7aee6e5b2aa729821864227e84
+        // send 1000 USDC from usdc whale to 0xb4c79dab8f259c7aee6e5b2aa729821864227e84
         const exec = await session.prepareCall(newTxData(toUint(USDC), {
             calldata: parseBuffer('a9059cbb000000000000000000000000b4c79dab8f259c7aee6e5b2aa729821864227e84000000000000000000000000000000000000000000000000000000003b9aca00'),
             origin: HAS_USDC,
