@@ -84,7 +84,7 @@ export function shaOf(buffer: Uint8Array): UInt256 {
 
 declare var __non_webpack_require__: any;
 declare var require: any;
-export function getNodejsLibs() {
+export function getNodejsLibs(cacheDir?: string) {
     let req: any = undefined;
     if (typeof __non_webpack_require__ === 'function') {
         req = __non_webpack_require__;
@@ -104,7 +104,9 @@ export function getNodejsLibs() {
                 fs.mkdirSync(dir);
             }
         }
-        const globalCache = path.resolve(process.cwd(), '.evm-js-cache');
+        const globalCache = cacheDir
+            ? path.resolve(process.cwd(), cacheDir)
+            : path.resolve(process.cwd(), '.evm-js-cache');
         return {
             require: req,
             writeCache: (_file: string, content: string) => {
