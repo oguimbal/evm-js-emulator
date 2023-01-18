@@ -94,6 +94,7 @@ export type HexString = `0x${string}`;
 
 export interface SessionOpts {
     rpcUrl?: string;
+    cacheDir?: string;
     /** Discard RPC cache after this period (defaults to 1 day) */
     maxRpcCacheTime?: number;
     contractsNames?: { [key: string]: string | { name: string; abi: utils.Interface } };

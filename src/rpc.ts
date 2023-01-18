@@ -8,7 +8,7 @@ export class RPC implements IRpc {
 
     private block: string | undefined;
     private cache = new Map<string, Uint8Array>();
-    constructor(private url: string | null | undefined, private maxCache: number = 1000 * 3600 * 24) {
+    constructor(private url: string | null | undefined, private maxCache: number = 1000 * 3600 * 24, private cacheDir?: string) {
     }
 
     private async fetchBuffer(opName: string, method: string, params: string[], forceBlock?: string) {
@@ -29,7 +29,7 @@ export class RPC implements IRpc {
 
         let onCache: ((str: any) => void) | null = null;
         if (this.maxCache) {
-            const { readCache, writeCache, expireDir } = getNodejsLibs();
+            const { readCache, writeCache, expireDir } = getNodejsLibs(this.cacheDir);
             if (readCache) {
                 const cacheFile = `rpc/${cacheKey}`;
                 expireDir('rpc', this.maxCache);

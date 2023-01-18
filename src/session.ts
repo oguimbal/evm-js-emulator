@@ -26,7 +26,7 @@ export class Session implements ISession {
     state: ExecState = newBlockchain(this);
 
     constructor(private opts?: SessionOpts) {
-        this.rpc = new RPC(opts?.rpcUrl ?? process.env.RPC_URL, opts?.maxRpcCacheTime);
+        this.rpc = new RPC(opts?.rpcUrl ?? process.env.RPC_URL, opts?.maxRpcCacheTime, opts?.cacheDir);
         if (opts?.contractsNames) {
             opts.contractsNames = Object.fromEntries(Object.entries(opts.contractsNames)
                 .map(([k, v]) => [k.toLowerCase(), v]));
@@ -81,7 +81,7 @@ export class Session implements ISession {
         if (code instanceof Buffer) {
             code = code.subarray()
         }
-        const compiled = compileCode(code, opts?.name ?? (a => this.opts?.contractsNames?.[a]), opts?.forceId, opts?.knownSequences);
+        const compiled = compileCode(code, opts?.name ?? (a => this.opts?.contractsNames?.[a]), opts?.forceId, opts?.knownSequences, this.opts?.cacheDir);
         this.contracts.set(to0xAddress(compiled.contractAddress), compiled);
         if (rawStorage) {
             setStorageInstance(this.state, compiled.contractAddress, rawStorage);
@@ -125,14 +125,14 @@ export class Session implements ISession {
         let compiled = this.contracts.get(key);
         if (!compiled) {
             const code = await this.getBytecodeFromCache(key);
-            compiled = compileCode(code, this.opts?.contractsNames?.[key], contract);
+            compiled = compileCode(code, this.opts?.contractsNames?.[key], contract, undefined, this.opts?.cacheDir);
             this.contracts.set(key, compiled);
         }
         return compiled!;
     }
 
     async getBytecodeFromCache(contract: HexString) {
-        const { readCache, writeCache } = getNodejsLibs();
+        const { readCache, writeCache } = getNodejsLibs(this.opts?.cacheDir);
         const cacheFile = `bytecode/${contract}.bytecode`;
 
         if (readCache) {

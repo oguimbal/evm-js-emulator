@@ -22,7 +22,8 @@ type Def = { name: string; abi?: utils.Interface};
 export function compileCode(contractCode: Uint8Array
     , _def: Nm | ((address: HexString) => Nm)
     , forceAddress?: UInt256
-    , knownSequences?: KnownSequence[]): CompiledCode {
+    , knownSequences?: KnownSequence[]
+    , cacheDir?: string): CompiledCode {
 
     // compute all labels
     let codeParts = computeCodeparts(contractCode);
@@ -81,7 +82,7 @@ return ${hasAsync ? 'async' : ''} () =>  {
 };
 }`;
 
-    const { require, writeCache } = getNodejsLibs();
+    const { require, writeCache } = getNodejsLibs(cacheDir);
     let bind: any;
     if (writeCache) {
         // when running NodeJS, lets write this in a file, in order to run it
