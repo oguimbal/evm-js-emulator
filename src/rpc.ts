@@ -14,12 +14,12 @@ export class RPC implements IRpc {
     private async fetchBuffer(opName: string, method: string, params: string[], forceBlock?: string) {
         let atBlock = forceBlock ?? this.block;
         if (!atBlock) {
-            const block = await this._fetchBuffer(`get current block`, 'eth_blockNumber', [], 'latest');
+            const block = await this._fetchBuffer(`get current block`, 'eth_blockNumber', [], null);
             atBlock = this.block = '0x' + dumpU256(toUint(block));
         }
         return await this._fetchBuffer(opName, method, params, atBlock);
     }
-    private async _fetchBuffer(opName: string, method: string, params: string[], block: string) {
+    private async _fetchBuffer(opName: string, method: string, params: string[], block: string | null) {
 
         const cacheKey = `${method}-${params.join(',')}`;
         let cached = this.cache.get(cacheKey);
@@ -48,7 +48,7 @@ export class RPC implements IRpc {
         const body =JSON.stringify({
             "jsonrpc": "2.0",
             "method": method,
-            "params": [...params, block],
+            "params": block ? [...params, block] : params,
             "id": ++id,
         });
         const result = await fetch(this.url, {
