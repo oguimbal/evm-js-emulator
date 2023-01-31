@@ -24,6 +24,11 @@ describe('Bytecode', () => {
         expect(result).to.deep.eq(uintBuffer(5, 0xff))
     })
 
+    it('mulmod', async () => {
+        const {result} = await executeBytecode('6008600a60030960005260ff6000f3')
+        expect(result).to.deep.eq(uintBuffer(6, 0xff))
+    })
+
     // todo sdiv
 
     it('mod', async () => {

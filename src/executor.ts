@@ -253,7 +253,7 @@ export class Executor implements IExecutor {
     }
     op_mulmod() {
         this.state.decrementGas(3);
-        throw new Error('not implemented: mulmod');
+        this.push(this.pop().mul(this.pop()).mod(this.pop()))
     }
     op_exp() {
         this.state.decrementGas(3);
