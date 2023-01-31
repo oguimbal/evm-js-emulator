@@ -237,7 +237,7 @@ export class Executor implements IExecutor {
     }
     op_sdiv() {
         this.state.decrementGas(3);
-        throw new Error('not implemented: sdiv');
+        this.push(this.pop().sdiv(this.pop()));
     }
     op_mod() {
         this.state.decrementGas(3);
