@@ -20,7 +20,8 @@ import { newSession, parseBuffer, toUint, MAX_UINT, isSuccess } from 'evm-js-emu
 const session = newSession({
     // let's fork Polygon
     rpcUrl: 'https://polygon-rpc.com',
-    // when you're running node, cache RPC results in order to avoid reboot
+    // when you're running node, cache RPC results in order to avoid coldstarts
+    //  (this will freeze your runs to the current block, until you delete this folder)
     cacheDir: '.evm-cache',
 });
 
@@ -80,6 +81,7 @@ It has been tested on many contracts, but:
 - Behaviours might differ
 
 
-# Debugging a run
+# TODO
 
-You'll notice that every contract
+- Implement missing opcodes
+- Implement sourcemaps to be able to step in .sol files
