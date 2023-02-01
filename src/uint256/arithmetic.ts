@@ -1,4 +1,3 @@
-
 export const ALPHABET = '0123456789abcdef';
 
 export const BYTES = 32;
@@ -16,6 +15,8 @@ export const JSNUMBER_MAX_INTEGER = 9007199254740991;
 
 export const RADIX_MIN = 2;
 export const RADIX_MAX = 16;
+
+export const MAX_INT256 = "0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF";
 
 export function fromHex(
   buffer: ArrayBuffer,

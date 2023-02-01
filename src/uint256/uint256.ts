@@ -7,6 +7,7 @@ export class UInt256 {
   public subtract = this.sub;
   public divideAndRemainder = this.divmod;
   public divide = this.div;
+  public divideSigned = this.sdiv;
   public multiply = this.mul;
   public remainder = this.mod;
   public shiftRight = this.shr;
@@ -226,6 +227,29 @@ export class UInt256 {
       rval = new UInt256(0); // dividing by zero returns 0 in the EVM
     }
     lval.buffer = rval.buffer;
+    return lval.optimize();
+  }
+
+  public sdiv(
+    rval: UInt256 | number,
+    mutate: boolean = this.isMutable
+  ): UInt256 {
+
+    let lval = (mutate && this) || this.copy();
+    rval = new UInt256(rval);
+
+    const maxInt256 = new UInt256(m.MAX_INT256, 16);
+    const negateResult = 
+      rval.gt(maxInt256) && !lval.gt(maxInt256) || 
+      lval.gt(maxInt256) && !rval.gt(maxInt256);
+
+    lval = lval.gt(maxInt256) ? lval.negate() : lval;
+    rval = rval.gt(maxInt256) ? rval.negate() : rval;
+
+    lval = lval.div(rval)
+
+    if(negateResult) lval = lval = lval.negate();
+
     return lval.optimize();
   }
 
