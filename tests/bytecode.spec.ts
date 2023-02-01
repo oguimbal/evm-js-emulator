@@ -31,17 +31,36 @@ describe('Bytecode', () => {
     })
 
     it('sdiv', async () => {
+        /* ----------------------------- CLASSIC CASES ------------------------------ */
+        // Test that 8 / 2 equals 4
+        let result = (await executeBytecode('600260080560005260ff6000f3')).result
+        expect(result).to.deep.eq(uintBuffer(4, 0xff))
+        // Test that 16 / 7 equals 2
+        result = (await executeBytecode('6007600f0560005260ff6000f3')).result
+        expect(result).to.deep.eq(uintBuffer(2, 0xff))
+        // Test that 10 / 3 equals 3
+        result = (await executeBytecode('6003600a0560005260ff6000f3')).result
+        expect(result).to.deep.eq(uintBuffer(3, 0xff))
+        // Test that 54 / -5 equals 10
+        result = (await executeBytecode('7ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffb60360560005260ff6000f3')).result
+        let uintResult = new UInt256(new Uint8Array(result.slice(0, 32).reverse()).buffer)
+        expect(uintResult).to.deep.eq(new UInt256(10).negate())
+        // Test that -16 / -7 equals 2
+        result = (await executeBytecode('7ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff97ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00560005260ff6000f3')).result
+        expect(result).to.deep.eq(uintBuffer(2, 0xff))
+
+        /* ------------------------------- EDGE CASES ------------------------------- */
         // Test that -2 / -1 equals 2
-        let result = (await executeBytecode('7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe0560005260ff6000f3')).result
+        result = (await executeBytecode('7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe0560005260ff6000f3')).result
         expect(result).to.deep.eq(uintBuffer(2, 0xff))
         // Test that 2 / -1 equals -2
         result = (await executeBytecode('7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff60020560005260ff6000f3')).result
-        let uintResult = new UInt256(new Uint8Array(result.slice(0, 32).reverse()).buffer)
-        expect(uintResult).to.deep.eq(U256("fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe", 16))
+        uintResult = new UInt256(new Uint8Array(result.slice(0, 32).reverse()).buffer)
+        expect(uintResult).to.deep.eq(new UInt256(2).negate())
         // Test that -2 / 1 equals -2
         result = (await executeBytecode('60017ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe0560005260ff6000f3')).result
         uintResult = new UInt256(new Uint8Array(result.slice(0, 32).reverse()).buffer)
-        expect(uintResult).to.deep.eq(U256("fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe", 16))
+        expect(uintResult).to.deep.eq(new UInt256(2).negate())
         // Test that 2 / 1 equals 2
         result = (await executeBytecode('600160020560005260ff6000f3')).result
         uintResult = new UInt256(new Uint8Array(result.slice(0, 32).reverse()).buffer)
@@ -49,7 +68,7 @@ describe('Bytecode', () => {
         // Test that MAX_INT256 / MIN_INT256 equals -1
         result = (await executeBytecode('7f7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f80000000000000000000000000000000000000000000000000000000000000000560005260ff6000f3')).result
         uintResult = new UInt256(new Uint8Array(result.slice(0, 32).reverse()).buffer)
-        expect(uintResult).to.deep.eq(U256("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", 16))
+        expect(uintResult).to.deep.eq(new UInt256(1).negate())
     })
 
     it('mod', async () => {
