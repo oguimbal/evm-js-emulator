@@ -245,7 +245,7 @@ export class Executor implements IExecutor {
     }
     op_smod() {
         this.state.decrementGas(3);
-        throw new Error('not implemented: smod');
+        this.push(this.pop().smod(this.pop()));
     }
     op_addmod() {
         this.state.decrementGas(3);
