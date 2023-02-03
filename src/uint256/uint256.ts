@@ -234,7 +234,6 @@ export class UInt256 {
     rval: UInt256 | number,
     mutate: boolean = this.isMutable
   ): UInt256 {
-
     let lval = (mutate && this) || this.copy();
     rval = new UInt256(rval);
 
@@ -265,6 +264,28 @@ export class UInt256 {
     if (m.divmod(lval.buffer, rval.buffer)) {
       lval = new UInt256(0); // dividing by zero returns 0 in the EVM
     }
+    return lval.optimize();
+  }
+
+  public smod(
+    rval: UInt256 | number,
+    mutate: boolean = this.isMutable
+  ): UInt256 {
+    let lval = (mutate && this) || this.copy();
+    rval = new UInt256(rval);
+
+    const maxInt256 = new UInt256(m.MAX_INT256, 16);
+    const negateResult = 
+      rval.gt(maxInt256) && lval.gt(maxInt256) ||
+      lval.gt(maxInt256);
+
+    lval = lval.gt(maxInt256) ? lval.negate() : lval;
+    rval = rval.gt(maxInt256) ? rval.negate() : rval;
+
+    lval = lval.mod(rval)
+
+    if(negateResult) lval = lval = lval.negate();
+
     return lval.optimize();
   }
 
