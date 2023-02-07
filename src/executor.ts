@@ -342,7 +342,8 @@ export class Executor implements IExecutor {
     }
     op_sar() {
         this.state.decrementGas(3);
-        throw new Error('not implemented: sar');
+        const n = this.popAsNum();
+        this.push(this.pop().sar(n))
     }
     op_sha3() {
         this.state.decrementGas(3);

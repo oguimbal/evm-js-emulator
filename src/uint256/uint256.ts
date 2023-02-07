@@ -466,6 +466,18 @@ export class UInt256 {
     return lval.optimize();
   }
 
+  public sar(shift: number, mutate: boolean = this.isMutable): UInt256 {
+    const lval = (mutate && this) || this.copy();
+    if (shift < 0 || shift > m.JSNUMBER_MAX_INTEGER) {
+      throw new TypeError('NAN');
+    }
+    if (!lval.buffer) {
+      return lval;
+    }
+    m.sar(lval.buffer, shift);
+    return lval.optimize();
+  }
+
   public eq(rval: UInt256 | number): boolean {
     if (typeof rval === 'number') {
       if (rval < 0 || rval > m.JSNUMBER_MAX_INTEGER) {

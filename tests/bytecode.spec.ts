@@ -151,4 +151,37 @@ describe('Bytecode', () => {
         const {result} = await executeBytecode('600260011c60005260ff6000f3')
         expect(result).to.deep.eq(uintBuffer(1, 0xff))
     })
+
+    it('sar', async () => {
+        /* ------------------------------ Classic cases ----------------------------- */
+        // Test that 20 >> 1 equals 10
+        let {result} = await executeBytecode('601460011d60005260206000f3')
+        expect(result).to.deep.eq(uintBuffer(10, 0x20))
+
+        // Test that -16 >> 4 equals -1
+        result = (await executeBytecode('7ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff060041d60005260206000f3')).result
+        expect(toUint(new Uint8Array(result)))
+            .to.deep.eq(new UInt256(1).negate())
+
+        /* ------------------------------- Edge cases ------------------------------- */
+        // Test that -1 >> 1 equals -1
+        result = (await executeBytecode('7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff60011d60005260206000f3')).result
+        expect(toUint(new Uint8Array(result)))
+            .to.deep.eq(new UInt256(1).negate())
+
+        // Test that 0 >> 1 equals 0
+        result = (await executeBytecode('600060011d60005260206000f3')).result
+        expect(toUint(new Uint8Array(result)))
+            .to.deep.eq(new UInt256(0))
+
+        // Test that MAX_INT256 >> 255 equals 0
+        result = (await executeBytecode('7f7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff60ff1d60005260206000f3')).result
+        expect(toUint(new Uint8Array(result)))
+            .to.deep.eq(new UInt256(0))
+
+        // Test that MAX_INT256 >> 253 equals 3
+        result = (await executeBytecode('7f7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff60fd1d60005260206000f3')).result
+        expect(toUint(new Uint8Array(result)))
+            .to.deep.eq(new UInt256(3))
+    })
 })

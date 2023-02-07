@@ -277,6 +277,23 @@ export function shr(lval: ArrayBuffer, shift: number): void {
   }
 }
 
+export function sar(lval: ArrayBuffer, shift: number): void {
+  const copy = new Uint32Array(lval.slice(0));
+  const lv = new Uint32Array(lval);
+  lv.fill(0);
+  const mem = new Uint32Array(2);
+  mem[0] = shift % DWORD_LENGTH; // shift
+  mem[1] = shift / DWORD_LENGTH; // offset
+  for (let i = 0; i < DWORDS; i += 1) {
+    if (i - mem[1] - 1 >= 0 && mem[0] !== 0) {
+      lv[i - mem[1] - 1] |= copy[i] << (DWORD_LENGTH - mem[0]);
+    }
+    if (i - mem[1] >= 0) {
+      lv[i - mem[1]] |= copy[i] >> mem[0];
+    }
+  }
+}
+
 export function mul(lval: ArrayBuffer, rval: ArrayBuffer | number): void {
   if (typeof rval === 'number') {
     rval = numberToBuffer(rval);
