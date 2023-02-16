@@ -28,6 +28,15 @@ export function toUint(buf: number | Uint8Array | HexString | string | UInt256):
     return U256(ab);
 }
 
+export function to32ByteBuffer(buffer: Uint8Array | Buffer){
+    const ab = new Uint8Array(32);
+    ab.fill(0)
+    for(let i = 0; i < buffer.length; i++){
+        ab.fill(buffer.at(i)!, i, i+1)
+    }
+    return ab
+}
+
 export function deriveU256FromBuffer(buffer: Uint8Array | Buffer, zerosUntil = 0): UInt256 {
     const prng = seedRandom(Buffer.from(buffer).toString('hex'));
     const ab = new ArrayBuffer(32);

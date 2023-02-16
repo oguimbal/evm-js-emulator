@@ -8,6 +8,14 @@ import { Session } from '../src/session';
 import { setStorageInstance } from '../src/blockchain-state';
 export * from './known-contracts';
 
+export const VALID_CHAIN_IDS: number[] = [
+    1,     // Ethereum
+    56,    // BNB smart chain
+    137,   // Polygon
+    10,    // Optimism
+    42161, // Arbitrum
+    43114, // Avalanche
+]
 
 export const TEST_SESSION_OPTS: SessionOpts = {
     contractsNames: Object.fromEntries(KNOWN_CONTRACT.map(c => [c.address, c.name])),
