@@ -10,6 +10,7 @@ interface TxInfo {
     readonly origin: UInt256;
     readonly gasPrice: UInt256;
     readonly timestamp: number;
+    readonly difficulty: UInt256;
 }
 
 interface State {
@@ -57,6 +58,9 @@ class BlockchainState implements ExecState {
     }
     get timestamp(): number {
         return this.store.currentTx.timestamp;
+    }
+    get difficulty(): UInt256 {
+        return this.store.currentTx.difficulty;
     }
     get gasLimit(): UInt256 {
         return this.stack.gasLimit;
@@ -189,6 +193,7 @@ class BlockchainState implements ExecState {
                 timestamp: data.timestamp,
                 gasPrice: data.gasPrice,
                 origin: data.origin,
+                difficulty: data.difficulty ?? U256(0),
             })
         )
         ret = await ret.transferFrom(full.caller, full.address, full.callValue)

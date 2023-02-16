@@ -42,6 +42,7 @@ export interface NewTxData {
     callvalue: UInt256;
     gasLimit: UInt256;
     timestamp: number;
+    difficulty?: UInt256;
 }
 
 export interface IRpc {
@@ -52,6 +53,7 @@ export interface IRpc {
 }
 export interface ExecState {
     readonly timestamp: number;
+    readonly difficulty: UInt256
     readonly address: UInt256;
     readonly caller: UInt256;
     readonly origin: UInt256;

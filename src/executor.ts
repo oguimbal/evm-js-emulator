@@ -459,7 +459,7 @@ export class Executor implements IExecutor {
     }
     op_difficulty() {
         this.state.decrementGas(3);
-        throw new Error('not implemented: difficulty');
+        this.push(this.state.difficulty.copy());
     }
     op_gaslimit() {
         this.state.decrementGas(3);
