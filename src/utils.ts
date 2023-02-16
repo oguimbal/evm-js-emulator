@@ -32,7 +32,7 @@ export function to32ByteBuffer(buffer: Uint8Array | Buffer){
     const ab = new Uint8Array(32);
     ab.fill(0)
     for(let i = 0; i < buffer.length; i++){
-        ab.fill(buffer.at(i)!, i, i+1)
+        ab.fill(buffer[i]!, i, i+1)
     }
     return ab
 }
