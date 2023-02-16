@@ -72,6 +72,10 @@ export class RPC implements IRpc {
         this.cache.set(cacheKey, cached);
         return cached;
     }
+    
+    async getChainId(): Promise<Uint8Array> {
+        return await this.fetchBuffer(`get the chain ID`, 'eth_chainId', []);
+    }
 
     async getBlock(): Promise<Uint8Array> {
         return await this.fetchBuffer(`get current block`, 'eth_blockNumber', []);

@@ -2,7 +2,7 @@ import { CompiledCode, ExecState, IExecutor, IMemReader, isFailure, isSuccess, L
 import { MemReader } from './mem-reader';
 import { Memory } from './memory';
 import { UInt256, U256 } from './uint256';
-import { dumpU256, shaOf, toNumberSafe, toUint } from './utils';
+import { dumpU256, shaOf, to32ByteBuffer, toNumberSafe, toUint } from './utils';
 import { Buffer } from 'buffer';
 import { utils } from 'ethers';
 
@@ -465,9 +465,11 @@ export class Executor implements IExecutor {
         this.state.decrementGas(3);
         this.push(this.state.gasLimit);
     }
-    op_chainid() {
+    @asyncOp()
+    async op_chainid() {
         this.state.decrementGas(3);
-        throw new Error('not implemented: chainid');
+        let chainId = to32ByteBuffer(await this.state.session.rpc.getChainId());
+        this.push(U256(chainId.buffer));
     }
     @asyncOp()
     async op_selfbalance() {

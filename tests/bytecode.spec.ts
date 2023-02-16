@@ -1,10 +1,15 @@
 import 'mocha';
 import { assert, expect } from 'chai';
-import { executeBytecode, uintBuffer } from './test-utils';
-import { UInt256, U256, toUint } from '../src';
+import { executeBytecode, uintBuffer, VALID_CHAIN_IDS} from './test-utils';
+import { UInt256, toUint } from '../src';
 
 describe('Bytecode', () => {
-
+    it('chainid', async () => {
+        const {result} = await executeBytecode('4660005260206000f3')
+        const chainId = parseInt(toUint(new Uint8Array(result)).toString())
+        expect(VALID_CHAIN_IDS.includes(chainId)).to.be.true
+    })
+    
     it('add', async () => {
         const {result} = await executeBytecode('600360040160005260ff6000f3')
         expect(result).to.deep.eq(uintBuffer(7, 0xff))

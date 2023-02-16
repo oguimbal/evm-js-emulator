@@ -46,6 +46,7 @@ export interface NewTxData {
 }
 
 export interface IRpc {
+    getChainId(): Promise<Uint8Array>
     getBlock(): Promise<Uint8Array>
     getCode(contract: HexString): Promise<Uint8Array>
     getStorageAt(address: HexString, key: HexString): Promise<UInt256>
