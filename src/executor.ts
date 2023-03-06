@@ -5,6 +5,7 @@ import { UInt256, U256 } from './uint256';
 import { dumpU256, shaOf, to32ByteBuffer, toNumberSafe, toUint } from './utils';
 import { Buffer } from 'buffer';
 import { utils } from 'ethers';
+import keccak256 from 'keccak256';
 
 const ZERO = U256(0);
 
@@ -834,6 +835,7 @@ export class Executor implements IExecutor {
         this.logs.push(log);
         this._onLog?.forEach(fn => fn(log));
     }
+
     op_create() {
         this.state.decrementGas(3);
         throw new Error('not implemented: create');
@@ -936,12 +938,45 @@ export class Executor implements IExecutor {
 
         // push success flag on stack
         this.setCallResult(result, retOffset, retSize, executor.logs, 'delegatecall');
-
     }
 
     op_create2() {
         this.state.decrementGas(3);
-        throw new Error('not implemented: create2');
+        const value = this.popAsNum();
+        const offset = this.popAsNum();
+        const size = this.popAsNum();
+        const salt = this.pop();
+
+        // Extract code from the memory
+        const code = this.mem.slice(offset, size);
+        
+        // Compute the new account address
+        const accountAddress = this.computeCreate2Address(salt, code)
+
+        this.push(accountAddress)
+    }
+
+    private computeCreate2Address(salt: UInt256, code: Uint8Array): UInt256 {
+        // Bases HEX strings
+        const stringSender = this.state.caller.toString(16).padStart(40, "0")
+        const stringSalt = salt.toString(16).padStart(64, "0")
+        const stringCode = Buffer.from(code).toString('hex')
+        
+        // Hash the creation code
+        const bytesCode = Buffer.from(stringCode, 'hex')
+        const hashedCode = keccak256(bytesCode)
+
+        // Final bytes to hash
+        const hexStringToHash = "ff" + stringSender + stringSalt + hashedCode.toString('hex')
+        const bytesToHash = Buffer.from(hexStringToHash, 'hex')
+
+        // Final hash
+        const hash = keccak256(bytesToHash)
+
+        // Final address
+        const address = "0x" + hash.toString('hex').slice(-40)
+        
+        return U256(address)
     }
 
     @asyncOp()
