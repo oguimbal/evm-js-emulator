@@ -1,9 +1,21 @@
 import 'mocha';
 import { assert, expect } from 'chai';
 import { executeBytecode, uintBuffer, VALID_CHAIN_IDS} from './test-utils';
-import { UInt256, toUint } from '../src';
+import { UInt256, toUint, U256, NewTxData } from '../src';
 
 describe('Bytecode', () => {
+    it('create2', async () => {
+        // Set the caller
+        const opts: Partial<NewTxData> = {caller: U256('0x9bbfed6889322e016e0a02ee459d306fc19545d8')}
+
+        // Create an account with 0 wei and a code that only return 4 FF
+        const {result} = await executeBytecode('6c63ffffffff60005260206000f36000526002600d60136000f560005260206000f3', opts)
+
+        // Check if the computed address is right
+        const newAccountAddress = Buffer.from(result).toString('hex').slice(-40)
+        expect(newAccountAddress).equals("ea341d967c7b14ebd95db3831e942db47b3f96c0")
+    })
+
     it('chainid', async () => {
         const {result} = await executeBytecode('4660005260206000f3')
         const chainId = parseInt(toUint(new Uint8Array(result)).toString())
