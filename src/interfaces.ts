@@ -100,7 +100,8 @@ export interface DeployOpts {
     balance?: UInt256;
     name?: string;
     knownSequences?: KnownSequence[];
-    forceId?: UInt256,
+    forceId?: UInt256;
+    onStartCall?: (executor: IExecutor) => void;
 }
 
 export interface SessionOpts {
@@ -159,8 +160,8 @@ export interface IExecutor {
     dumpStack(): string[];
 }
 
-export type OnStartingCall = (exec: IExecutor, callType: 'call' | 'callcode' | 'staticcall' | 'delegatecall') => void;
-export type OnEndedCall = (exec: IExecutor, callType: 'call' | 'callcode' | 'staticcall' | 'delegatecall', success: boolean, reason: StopReason | undefined) => void;
+export type OnStartingCall = (exec: IExecutor, callType: 'call' | 'callcode' | 'staticcall' | 'delegatecall' | 'create2') => void;
+export type OnEndedCall = (exec: IExecutor, callType: 'call' | 'callcode' | 'staticcall' | 'delegatecall' | 'create2', success: boolean, reason: StopReason | undefined) => void;
 export type OnLog = (log: Log) => void;
 export interface Log {
     readonly topics: readonly UInt256[];

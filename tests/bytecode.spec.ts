@@ -1,29 +1,44 @@
 import 'mocha';
 import { assert, expect } from 'chai';
-import { executeBytecode, getCreate2ByteCode, uintBuffer, VALID_CHAIN_IDS } from './test-utils';
-import { UInt256, toUint, U256, NewTxData } from '../src';
+import { executeBytecode, getCreate2ByteCode, newTxData, execWatchInstructions, TEST_SESSION_OPTS, uintBuffer, VALID_CHAIN_IDS } from './test-utils';
+import { UInt256, toUint, U256, NewTxData, parseBuffer } from '../src';
+import { Session } from '../src/session';
 
 describe('Bytecode', () => {
     it('create2', async () => {
+        const session = new Session(TEST_SESSION_OPTS);
+        const callOpts: Partial<NewTxData> = { caller: U256('0xbe862ad9abfe6f22bcb087716c7d89a26051f74c') }
+
         /* ------------------- Deploy a new contract with CREATE2 ------------------- */
         // Set the caller
-        const deployOpts: Partial<NewTxData> = { caller: U256('0xbe862ad9abfe6f22bcb087716c7d89a26051f74c') }
+        const create2Bytecode = getCreate2ByteCode("DummyConstructor")
 
-        // Create an account with 0 wei and a code compiled from tests/contracts/DummyConstructor.sol
-        const { result: deployResult } = await executeBytecode(
-            getCreate2ByteCode("DummyConstructor"), 
-            deployOpts
-        )
+        // Execute the create2Bytecode
+        const tempCreate2Contract = session.deployRaw(parseBuffer(create2Bytecode));
+        var txData = newTxData(tempCreate2Contract, callOpts);
+        var exec = await session.prepareCall(txData);
+        var buffer = await execWatchInstructions(exec);
+        const create2Result = [...buffer ?? []]
 
         // Check if the computed address is right
-        const address = Buffer.from(deployResult).toString('hex').slice(-40)
-        // Computed with evm.codes and [create2 CLI tool](https://github.com/lightclient/create2)
+        const address = Buffer.from(create2Result).toString('hex').slice(-40)
+
+        // Computed with evm.codes and verified with [create2 CLI tool](https://github.com/lightclient/create2)
         expect(address).equals("a588c1936156dbea2f33711c50e5983771ca5c90")
 
         /* -------------------------- Call the new contract ------------------------- */
 
-        // Call the `read()` new accoun
-        const { result: callResult } = await executeBytecode('6357de26a46000526020600060046038600073' + address + '5af160206020f3')
+        // Call the `read()` new account
+        const callBytecode = "6357de26a4600052602060006004601c600073"+address+"5af160206000f3"
+
+        const tempCallContract = session.deployRaw(parseBuffer(callBytecode));
+        txData = newTxData(tempCallContract, callOpts);
+        exec = await session.prepareCall(txData);
+        buffer = await execWatchInstructions(exec);
+        const callResult = [...buffer ?? []]
+
+        console.log(callResult);
+        
     })
 
     it('chainid', async () => {
