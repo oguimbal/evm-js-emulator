@@ -4,18 +4,11 @@ import { Buffer } from 'buffer';
 import { compileCode, KnownSequence } from './compiler';
 import { newBlockchain, setStorageInstance } from './blockchain-state';
 import { Executor } from './executor';
-import { CompiledCode, ExecState, NewTxData, HexString, IExecutor, ISession, isFailure, IStorage, SessionOpts } from './interfaces';
+import { CompiledCode, ExecState, NewTxData, HexString, IExecutor, ISession, isFailure, IStorage, SessionOpts, DeployOpts } from './interfaces';
 import { RPC } from './rpc';
 import { MemStorage } from './storage';
 import { U256, UInt256 } from './uint256';
 import { from0x, getNodejsLibs, parseBuffer, to0xAddress, toAddress, toUint } from './utils';
-
-interface DeployOpts {
-    balance?: UInt256;
-    name?: string;
-    knownSequences?: KnownSequence[];
-    forceId?: UInt256,
-}
 
 export function newSession(opts?: SessionOpts) {
     return new Session(opts);
@@ -47,7 +40,7 @@ export class Session implements ISession {
     }
 
     /** Run deployment contract */
-    async deploy(code: string | Buffer | Uint8Array, opts: Omit<NewTxData, 'contract'>, deployOpts?: DeployOpts) {
+    async deploy(code: string | Buffer | Uint8Array, opts: Omit<NewTxData, 'contract'>, deployOpts?: DeployOpts): Promise<UInt256> {
         // create a memory storage, that will be the deployed contract storage
         const storage = new MemStorage(deployOpts?.balance ?? U256(0));
 
@@ -60,6 +53,8 @@ export class Session implements ISession {
 
         // delete this intermediate deployer contract
         this.contracts.delete(this.contractKey(deployer));
+
+        const test = Buffer.from(code).toString('hex')
 
         // execute constructor
         const result = await executor.execute();

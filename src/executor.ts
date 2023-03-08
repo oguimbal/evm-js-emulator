@@ -2,10 +2,11 @@ import { CompiledCode, ExecState, IExecutor, IMemReader, isFailure, isSuccess, L
 import { MemReader } from './mem-reader';
 import { Memory } from './memory';
 import { UInt256, U256 } from './uint256';
-import { dumpU256, shaOf, to32ByteBuffer, toNumberSafe, toUint } from './utils';
+import { dumpU256, parseBuffer, shaOf, to32ByteBuffer, toNumberSafe, toUint } from './utils';
 import { Buffer } from 'buffer';
 import { utils } from 'ethers';
 import keccak256 from 'keccak256';
+import { newDeployTxData } from '../tests/test-utils';
 
 const ZERO = U256(0);
 
@@ -940,9 +941,10 @@ export class Executor implements IExecutor {
         this.setCallResult(result, retOffset, retSize, executor.logs, 'delegatecall');
     }
 
-    op_create2() {
+    @asyncOp()
+    async op_create2() {
         this.state.decrementGas(3);
-        const value = this.popAsNum();
+        const value = U256(this.popAsNum());
         const offset = this.popAsNum();
         const size = this.popAsNum();
         const salt = this.pop();
@@ -952,6 +954,18 @@ export class Executor implements IExecutor {
         
         // Compute the new account address
         const accountAddress = this.computeCreate2Address(salt, code)
+
+        // Deploy options
+        const deployOpts = newDeployTxData({
+            contract: accountAddress,
+            callvalue: value
+        })
+
+        // Deploy the code at the account address
+        const test = await this.state.session.deploy(
+            code,
+            deployOpts
+        )
 
         this.push(accountAddress)
     }
@@ -963,12 +977,12 @@ export class Executor implements IExecutor {
         const stringCode = Buffer.from(code).toString('hex')
         
         // Hash the creation code
-        const bytesCode = Buffer.from(stringCode, 'hex')
+        const bytesCode = parseBuffer(stringCode)
         const hashedCode = keccak256(bytesCode)
 
         // Final bytes to hash
         const hexStringToHash = "ff" + stringSender + stringSalt + hashedCode.toString('hex')
-        const bytesToHash = Buffer.from(hexStringToHash, 'hex')
+        const bytesToHash = parseBuffer(hexStringToHash)
 
         // Final hash
         const hash = keccak256(bytesToHash)

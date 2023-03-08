@@ -1,4 +1,5 @@
 import { utils } from 'ethers';
+import { KnownSequence } from './compiler';
 import type { UInt256 } from './uint256';
 
 export interface IStorage {
@@ -95,6 +96,13 @@ export interface ExecState {
 
 export type HexString = `0x${string}`;
 
+export interface DeployOpts {
+    balance?: UInt256;
+    name?: string;
+    knownSequences?: KnownSequence[];
+    forceId?: UInt256,
+}
+
 export interface SessionOpts {
     rpcUrl?: string;
     cacheDir?: string;
@@ -110,6 +118,7 @@ export interface ISession {
     prepareCall(input: NewTxData): Promise<IExecutor>;
     prepareStaticCall(contract: HexString | UInt256, calldata: string | Uint8Array, returnDataSize: number): Promise<IExecutor>;
     addNames(names?: SessionOpts['contractsNames']): this;
+    deploy(code: string | Buffer | Uint8Array, opts: Omit<NewTxData, 'contract'>, deployOpts?: DeployOpts): Promise<UInt256>;
 }
 
 
