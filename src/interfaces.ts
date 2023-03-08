@@ -80,6 +80,8 @@ export interface ExecState {
     getStorageOf(dummy: HexString | UInt256): IStorage;
     getBalance(): Promise<UInt256> | UInt256;
 
+    getContract(hex: HexString | UInt256): Promise<CompiledCode>;
+    setContract(contract: CompiledCode): ExecState;
 
     setStorage(location: UInt256, value: UInt256): ExecState;
     setStorageLocation(address: UInt256, storage: IStorage): ExecState;
@@ -101,7 +103,6 @@ export interface DeployOpts {
     name?: string;
     knownSequences?: KnownSequence[];
     forceId?: UInt256;
-    onStartCall?: (executor: IExecutor) => void;
 }
 
 export interface SessionOpts {
@@ -115,6 +116,7 @@ export interface SessionOpts {
 export interface ISession {
     readonly rpc: IRpc;
     readonly state: ExecState;
+    readonly opts?: SessionOpts | undefined;
     getContract(contract: HexString | UInt256): Promise<CompiledCode>;
     prepareCall(input: NewTxData): Promise<IExecutor>;
     prepareStaticCall(contract: HexString | UInt256, calldata: string | Uint8Array, returnDataSize: number): Promise<IExecutor>;

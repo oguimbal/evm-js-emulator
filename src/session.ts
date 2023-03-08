@@ -1,24 +1,22 @@
 import * as dotenv from 'dotenv';
 dotenv.config()
 import { Buffer } from 'buffer';
-import { compileCode, KnownSequence } from './compiler';
+import { compileCode } from './compiler';
 import { newBlockchain, setStorageInstance } from './blockchain-state';
 import { Executor } from './executor';
-import { CompiledCode, ExecState, NewTxData, HexString, IExecutor, ISession, isFailure, IStorage, SessionOpts, DeployOpts } from './interfaces';
+import { ExecState, NewTxData, HexString, IExecutor, ISession, isFailure, IStorage, SessionOpts, DeployOpts } from './interfaces';
 import { RPC } from './rpc';
-import { MemStorage } from './storage';
 import { U256, UInt256 } from './uint256';
-import { from0x, getNodejsLibs, parseBuffer, to0xAddress, toAddress, toUint } from './utils';
+import { parseBuffer, to0xAddress, toAddress, toUint } from './utils';
 
 export function newSession(opts?: SessionOpts) {
     return new Session(opts);
 }
 export class Session implements ISession {
-    private contracts = new Map<string, CompiledCode>();
     readonly rpc: RPC;
     state: ExecState = newBlockchain(this);
 
-    constructor(private opts?: SessionOpts) {
+    constructor(public opts?: SessionOpts) {
         this.rpc = new RPC(opts?.rpcUrl ?? process.env.RPC_URL, opts?.maxRpcCacheTime, opts?.cacheDir);
         if (opts?.contractsNames) {
             opts.contractsNames = Object.fromEntries(Object.entries(opts.contractsNames)
@@ -41,42 +39,21 @@ export class Session implements ISession {
 
     /** Run deployment contract */
     async deploy(code: string | Buffer | Uint8Array, opts: Omit<NewTxData, 'contract'>, deployOpts?: DeployOpts): Promise<UInt256> {
-        // create a memory storage, that will be the deployed contract storage
-        const storage = new MemStorage(deployOpts?.balance ?? U256(0));
-
-        // deploy constructor & prepare its execution
-        const deployer = this.deployRaw(code, {}, storage);
-        const executor = await this.prepareCall({
+        const exec = new Executor(await this.state.newTx({
             ...opts,
-            contract: deployer,
-        });
+            contract: toAddress('0x00'),
+        }), (() => { }) as any); // hack
 
-        // delete this intermediate deployer contract
-        this.contracts.delete(this.contractKey(deployer));
-
-        // execute constructor
-        deployOpts?.onStartCall?.(executor);
-        const result = await executor.execute();
-        if (result.type !== 'return') {
-            throw new Error('Was expecting a constructor in bytecode... use .deployRaw() if you want de deploy a raw contract code');
-        }
-
-        // deploy the actual code of this contract,
-        // along with the storage initialized by the constructor
-        const contract = await this.deployRaw(result.data, deployOpts, result.newState.stor);
-        return contract;
+        const codeBuffer = toCode(code);
+        const contractAddress = await exec.doCreate2(U256(0), codeBuffer, deployOpts?.balance ?? U256(0));
+        this.state = exec.state.popCallStack();
+        return contractAddress;
     }
 
     /** Deploy raw code (whihout running the constructor) */
     deployRaw(code: string | Buffer | Uint8Array, opts?: DeployOpts, rawStorage?: IStorage) {
-        if (typeof code === 'string') {
-            code = Buffer.from(code, 'hex');
-        }
-        if (code instanceof Buffer) {
-            code = code.subarray()
-        }
-        const compiled = compileCode(code, opts?.name ?? (a => this.opts?.contractsNames?.[a]), opts?.forceId, opts?.knownSequences, this.opts?.cacheDir);
-        this.contracts.set(to0xAddress(compiled.contractAddress), compiled);
+        const compiled = compileCode(toCode(code), opts?.name ?? (a => this.opts?.contractsNames?.[a]), opts?.forceId, opts?.knownSequences, this.opts?.cacheDir);
+        this.state = this.state.setContract(compiled);
         if (rawStorage) {
             setStorageInstance(this.state, compiled.contractAddress, rawStorage);
         }
@@ -114,41 +91,21 @@ export class Session implements ISession {
     }
 
     async getContract(_contract: HexString | UInt256) {
-        const contract = toAddress(_contract);
-        const key = this.contractKey(contract);
-        let compiled = this.contracts.get(key);
-        if (!compiled) {
-            const code = await this.getBytecodeFromCache(key);
-            compiled = compileCode(code, this.opts?.contractsNames?.[key], contract, undefined, this.opts?.cacheDir);
-            this.contracts.set(key, compiled);
-        }
-        return compiled!;
+        return await this.state.getContract(_contract);
     }
 
-    async getBytecodeFromCache(contract: HexString) {
-        const { readCache, writeCache } = getNodejsLibs(this.opts?.cacheDir);
-        const cacheFile = `bytecode/${contract}.bytecode`;
-
-        if (readCache) {
-            // when running nodejs, check if we have this contract in cache
-            const cached = readCache(cacheFile);
-            if (cached) {
-                return Buffer.from(cached, 'hex').subarray();
-            }
-        }
-
-        // download contract
-        const online = await this.rpc.getCode(contract);
-
-        if (writeCache) {
-            // when running nodejs, cache the contract
-            writeCache(cacheFile, Buffer.from(online).toString('hex'));
-        }
-
-        return online;
-    }
 
     private contractKey(contract: HexString | UInt256) {
         return to0xAddress(toAddress(contract));
     }
+}
+
+function toCode(code: string | Buffer | Uint8Array): Uint8Array {
+    if (typeof code === 'string') {
+        return Buffer.from(code, 'hex');
+    }
+    if (code instanceof Buffer) {
+        return code.subarray()
+    }
+    return code;
 }
