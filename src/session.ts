@@ -54,9 +54,8 @@ export class Session implements ISession {
         // delete this intermediate deployer contract
         this.contracts.delete(this.contractKey(deployer));
 
-        const test = Buffer.from(code).toString('hex')
-
         // execute constructor
+        deployOpts?.onStartCall?.(executor);
         const result = await executor.execute();
         if (result.type !== 'return') {
             throw new Error('Was expecting a constructor in bytecode... use .deployRaw() if you want de deploy a raw contract code');
@@ -64,7 +63,7 @@ export class Session implements ISession {
 
         // deploy the actual code of this contract,
         // along with the storage initialized by the constructor
-        const contract = await this.deployRaw(result.data, deployOpts, storage);
+        const contract = await this.deployRaw(result.data, deployOpts, result.newState.stor);
         return contract;
     }
 

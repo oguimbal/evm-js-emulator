@@ -1,4 +1,4 @@
-import { CompiledCode, ExecState, IExecutor, IMemReader, isFailure, isSuccess, Log, OnEndedCall, OnLog, OnStartingCall, StopReason } from './interfaces';
+import { CompiledCode, DeployOpts, ExecState, IExecutor, IMemReader, isFailure, isSuccess, Log, OnEndedCall, OnLog, OnStartingCall, StopReason } from './interfaces';
 import { MemReader } from './mem-reader';
 import { Memory } from './memory';
 import { UInt256, U256 } from './uint256';
@@ -956,18 +956,23 @@ export class Executor implements IExecutor {
         const accountAddress = this.computeCreate2Address(salt, code)
 
         // Deploy options
-        const deployOpts = newDeployTxData({
-            contract: accountAddress,
+        const opts = newDeployTxData({
             callvalue: value
         })
 
+        const deployOpts: DeployOpts = {
+            forceId: accountAddress,
+            onStartCall: (executor) => this._onStartCall?.forEach(c => c(executor, 'create2'))
+        }
+
         // Deploy the code at the account address
-        const test = await this.state.session.deploy(
+        const deployedAddress = await this.state.session.deploy(
             code,
+            opts,
             deployOpts
         )
 
-        this.push(accountAddress)
+        this.push(deployedAddress)
     }
 
     private computeCreate2Address(salt: UInt256, code: Uint8Array): UInt256 {
