@@ -1,9 +1,10 @@
 import { Record, RecordOf, List, Map as ImMap } from 'immutable';
-import { ExecState, HexString, IMemReader, IRpc, ISession, IStorage, NewTxData } from './interfaces';
+import { compileCode } from './compiler';
+import { CompiledCode, ExecState, HexString, IMemReader, IRpc, ISession, IStorage, NewTxData } from './interfaces';
 import { MemReader } from './mem-reader';
 import { RpcStorage } from './storage';
 import { U256, UInt256 } from './uint256';
-import { dumpU256, to0xAddress } from './utils';
+import { dumpU256, getNodejsLibs, to0xAddress, toAddress } from './utils';
 
 interface TxInfo {
     /** tx origin */
@@ -21,6 +22,8 @@ interface State {
     readonly storages: ImMap<HexString, IStorage>;
     /** Current stack */
     readonly callStack: List<Stack>;
+    /** Deployed contracts */
+    readonly contracts: ImMap<HexString, CompiledCode>;
 }
 interface Stack {
     readonly gas: UInt256;
@@ -39,6 +42,7 @@ const newStore = Record<State>({
     currentTx: null!,
     storages: ImMap(),
     callStack: List(),
+    contracts: ImMap(),
 })
 export function newBlockchain(session: ISession) {
     return new BlockchainState(newStore().set('session', session));
@@ -107,6 +111,50 @@ class BlockchainState implements ExecState {
         return this.getStorageOf(this.current0x);
     }
 
+
+    async getContract(hex: HexString | UInt256): Promise<CompiledCode> {
+        hex = typeof hex === 'string' ? hex : to0xAddress(hex);
+        const contractAddress = toAddress(hex);
+        let compiled = this.store.contracts.get(hex);
+
+        if (!compiled) {
+            const code = await this.getBytecodeFromCache(hex);
+            compiled = compileCode(code, this.session.opts?.contractsNames?.[hex], contractAddress, undefined, this.session.opts?.cacheDir);
+            const contracts = this.store.contracts.set(hex, compiled);
+            // it is ok to mutate store, since this is repeteable in case the current tx reverts
+            this.store = this.store.set('contracts', contracts);
+        }
+        return compiled!;
+    }
+
+    private async getBytecodeFromCache(contract: HexString) {
+        const { readCache, writeCache } = getNodejsLibs(this.session.opts?.cacheDir);
+        const cacheFile = `bytecode/${contract}.bytecode`;
+
+        if (readCache) {
+            // when running nodejs, check if we have this contract in cache
+            const cached = readCache(cacheFile);
+            if (cached) {
+                return Buffer.from(cached, 'hex').subarray();
+            }
+        }
+
+        // download contract
+        const online = await this.session.rpc.getCode(contract);
+
+        if (writeCache) {
+            // when running nodejs, cache the contract
+            writeCache(cacheFile, Buffer.from(online).toString('hex'));
+        }
+
+        return online;
+    }
+
+    setContract(contract: CompiledCode): ExecState {
+        const contracts = this.store.contracts.set(to0xAddress(contract.contractAddress), contract);
+        return new BlockchainState(this.store.set('contracts', contracts));
+    }
+
     getStorageOf(hex: HexString | UInt256): IStorage {
         hex = typeof hex === 'string' ? hex : to0xAddress(hex);
         let cached = this.store.storages.get(hex);
@@ -134,6 +182,8 @@ class BlockchainState implements ExecState {
     setStorage(location: UInt256, value: UInt256): ExecState {
         return this._changeStorage(this.current0x, s => s.set(location, value));
     }
+
+
 
     async transferFrom(_from: UInt256, _to: UInt256, value: UInt256): Promise<BlockchainState> {
         if (value.eq(0)) {

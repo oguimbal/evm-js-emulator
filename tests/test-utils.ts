@@ -76,7 +76,7 @@ export function getCreate2ByteCode(contractName: string) {
     const creationCode = JSON.parse(solc.compile(JSON.stringify(solcOpt)))
         .contracts['compiled']['DummyConstructor'].evm.bytecode.object;
 
-    // Store creation code in memory 
+    // Store creation code in memory
     for(let i = 0; i < creationCode.length; i += 64){
         // PUSH32
         create2ByteCode += "7f"
@@ -90,7 +90,7 @@ export function getCreate2ByteCode(contractName: string) {
         create2ByteCode += "52"
     }
 
-    // Push CREATE2    
+    // Push CREATE2
     create2ByteCode += "600260fc60006000f5"
 
     // Store result address in memory and return it
@@ -325,6 +325,8 @@ export async function transferUsdcTo(session: ISession, address: string | HexStr
         calldata: parseBuffer(`0xa9059cbb000000000000000000000000${address}${dumpU256(qty).padStart(64, '0')}`),
         origin: HAS_USDC,
     }));
+    await execWatchInstructions(exec);
+    return;
     if (watch) {
         await execWatchInstructions(exec);
     } else {

@@ -7,6 +7,8 @@ import { Buffer } from 'buffer';
 import { utils } from 'ethers';
 import keccak256 from 'keccak256';
 import { newDeployTxData } from '../tests/test-utils';
+import { MemStorage } from './storage';
+import { compileCode } from './compiler';
 
 const ZERO = U256(0);
 
@@ -413,7 +415,7 @@ export class Executor implements IExecutor {
     @asyncOp()
     async op_extcodesize() {
         const address = this.pop();
-        const contract = await this.state.session.getContract(address);
+        const contract = await this.state.getContract(address);
         this.push(U256(contract.code?.size ?? 0));
     }
     op_extcodecopy() {
@@ -870,11 +872,15 @@ export class Executor implements IExecutor {
         this.setCallResult(result, retOffset, retSize, executor.logs, 'call');
     }
 
-    private setCallResult(result: StopReason, retOffset: number, retSize: number, logs: Log[], type: 'call' | 'delegatecall' | 'callcode' | 'staticcall') {
+    private setCallResult(result: StopReason, retOffset: number, retSize: number, logs: Log[], type: 'call' | 'delegatecall' | 'callcode' | 'staticcall' | 'create2') {
         const success = isSuccess(result);
-        this.pushBool(success);
+        if (type !== 'create2') {
+            this.pushBool(success);
+        }
         this._onEndCall?.forEach(c => c(this, type, success, result));
-        this.lastReturndata = new MemReader([]);
+        if (type !== 'create2') {
+            this.lastReturndata = new MemReader([]);
+        }
 
 
         if (isFailure(result)) {
@@ -895,7 +901,9 @@ export class Executor implements IExecutor {
         }
 
         // copy returndata to memory (when has return data)
-        this.lastReturndata = new MemReader([...result.data]);
+        if (type !== 'create2') {
+            this.lastReturndata = new MemReader([...result.data]);
+        }
         for (let i = 0; i < retSize; i++) {
             this.mem.set(retOffset + i, result.data[i] ?? 0);
         }
@@ -951,28 +959,43 @@ export class Executor implements IExecutor {
 
         // Extract code from the memory
         const code = this.mem.slice(offset, size);
-        
+
         // Compute the new account address
-        const accountAddress = this.computeCreate2Address(salt, code)
+        const accountAddress = await this.doCreate2(salt, code, value);
+
+        // todo decrement gas based on the size of the deployed contract
+        this.push(accountAddress);
+    }
+
+    async doCreate2(salt: UInt256, code: Uint8Array, value: UInt256) {
+        const accountAddress = this.computeCreate2Address(salt, code);
 
         // Deploy options
         const opts = newDeployTxData({
             callvalue: value
-        })
+        });
 
-        const deployOpts: DeployOpts = {
-            forceId: accountAddress,
-            onStartCall: (executor) => this._onStartCall?.forEach(c => c(executor, 'create2'))
+        const newState = await this.state
+            .pushCallTo(accountAddress, value, code, 0x20, this.state.gas);
+
+
+        // compile the deployer code
+        const compiledDeployer = compileCode(code, undefined, accountAddress, undefined, undefined);
+        const executor = new Executor(newState, compiledDeployer);
+
+        // execute deployer
+        this._onStartCall?.forEach(c => c(executor, 'create2'));
+        const result = await executor.execute();
+        this.setCallResult(result, 0, 0, executor.logs, 'create2');
+
+        if (!result.data) {
+            throw new Error('no data returned from deployer');
         }
 
-        // Deploy the code at the account address
-        const deployedAddress = await this.state.session.deploy(
-            code,
-            opts,
-            deployOpts
-        )
-
-        this.push(deployedAddress)
+        // compile the contract code (returned by the deployer)
+        const compiledContract = compileCode(result.data, undefined, accountAddress, undefined, undefined);
+        this.state = this.state.setContract(compiledContract);
+        return accountAddress;
     }
 
     private computeCreate2Address(salt: UInt256, code: Uint8Array): UInt256 {
@@ -980,7 +1003,7 @@ export class Executor implements IExecutor {
         const stringSender = this.state.caller.toString(16).padStart(40, "0")
         const stringSalt = salt.toString(16).padStart(64, "0")
         const stringCode = Buffer.from(code).toString('hex')
-        
+
         // Hash the creation code
         const bytesCode = parseBuffer(stringCode)
         const hashedCode = keccak256(bytesCode)
@@ -994,7 +1017,7 @@ export class Executor implements IExecutor {
 
         // Final address
         const address = "0x" + hash.toString('hex').slice(-40)
-        
+
         return U256(address)
     }
 
