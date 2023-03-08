@@ -27,7 +27,6 @@ describe('Bytecode', () => {
         expect(address).equals("a588c1936156dbea2f33711c50e5983771ca5c90")
 
         /* -------------------------- Call the new contract ------------------------- */
-
         // Call the `read()` new account
         const callBytecode = "6357de26a4600052602060006004601c600073"+address+"5af160206000f3"
 
@@ -35,10 +34,10 @@ describe('Bytecode', () => {
         txData = newTxData(tempCallContract, callOpts);
         exec = await session.prepareCall(txData);
         buffer = await execWatchInstructions(exec);
-        const callResult = [...buffer ?? []]
+        const callResult = Buffer.from([...buffer ?? []]).toString('hex')
 
-        console.log(callResult);
-        
+        // Check if the call result is a 32 bytes => 0xfff..fff
+        expect(callResult).equals("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
     })
 
     it('chainid', async () => {
