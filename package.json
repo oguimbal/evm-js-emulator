@@ -16,7 +16,9 @@
     "immutable": "^4.1.0",
     "keccak256": "^1.0.6",
     "node-fetch": "2.6.6",
-    "seedrandom": "^3.0.5"
+    "seedrandom": "^3.0.5",
+    "solc": "^0.8.19",
+    "solc-js": "^1.0.1"
   },
   "peerDependencies": {
     "ethers": "^5.7.0"
