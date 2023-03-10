@@ -1,6 +1,6 @@
 {
   "name": "evm-js-emulator",
-  "version": "0.1.35",
+  "version": "0.1.36",
   "description": "A simple in-memory EVM JS emulator for testing smart contracts",
   "repository": "https://github.com/oguimbal/evm-js-emulator",
   "licence": "MIT",

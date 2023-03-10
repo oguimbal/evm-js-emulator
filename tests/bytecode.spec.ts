@@ -1,8 +1,9 @@
 import 'mocha';
 import { assert, expect } from 'chai';
-import { executeBytecode, getCreate2ByteCode, newTxData, execWatchInstructions, TEST_SESSION_OPTS, uintBuffer, VALID_CHAIN_IDS } from './test-utils';
+import { executeBytecode,  newTxData, execWatchInstructions, TEST_SESSION_OPTS, uintBuffer, VALID_CHAIN_IDS } from './test-utils';
 import { UInt256, toUint, U256, NewTxData, parseBuffer } from '../src';
 import { Session } from '../src/session';
+import { getCreate2ByteCode } from './solidity-utils';
 
 describe('Bytecode', () => {
     it('create2', async () => {
