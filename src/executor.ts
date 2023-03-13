@@ -1000,7 +1000,7 @@ export class Executor implements IExecutor {
 
     private computeCreate2Address(salt: UInt256, code: Uint8Array): UInt256 {
         // Bases HEX strings
-        const stringSender = this.state.caller.toString(16).padStart(40, "0")
+        const stringSender = this.state.address.toString(16).padStart(40, "0")
         const stringSalt = salt.toString(16).padStart(64, "0")
         const stringCode = Buffer.from(code).toString('hex')
 

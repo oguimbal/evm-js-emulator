@@ -7,15 +7,13 @@ import { Session } from '../src/session';
 describe('Bytecode', () => {
     it('create2', async () => {
         const session = new Session(TEST_SESSION_OPTS);
-        const callOpts: Partial<NewTxData> = { caller: U256('0xbe862ad9abfe6f22bcb087716c7d89a26051f74c') }
-
         /* ------------------- Deploy a new contract with CREATE2 ------------------- */
         // Set the caller
         const create2Bytecode = getCreate2ByteCode("DummyConstructor")
 
         // Execute the create2Bytecode
-        const tempCreate2Contract = session.deployRaw(parseBuffer(create2Bytecode));
-        var txData = newTxData(tempCreate2Contract, callOpts);
+        const tempCreate2Contract = session.deployRaw(parseBuffer(create2Bytecode), {forceId: U256("0xbe862ad9abfe6f22bcb087716c7d89a26051f74c")});
+        var txData = newTxData(tempCreate2Contract);
         var exec = await session.prepareCall(txData);
         var buffer = await execWatchInstructions(exec);
         const create2Result = [...buffer ?? []]
@@ -31,7 +29,7 @@ describe('Bytecode', () => {
         const callBytecode = "6357de26a4600052602060006004601c600073"+address+"5af160206000f3"
 
         const tempCallContract = session.deployRaw(parseBuffer(callBytecode));
-        txData = newTxData(tempCallContract, callOpts);
+        txData = newTxData(tempCallContract);
         exec = await session.prepareCall(txData);
         buffer = await execWatchInstructions(exec);
         const callResult = Buffer.from([...buffer ?? []]).toString('hex')
