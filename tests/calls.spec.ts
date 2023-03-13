@@ -14,6 +14,21 @@ describe('Calls', () => {
         session = new Session(TEST_SESSION_OPTS);
     });
 
+    it('check create2 with a Polygon Nested WalletFactory', async () => {
+        const contract = U256("0xdd64da5ce84bc6f2c130ed2712be9452b5c45839")
+
+        const exec = await session.prepareCall(newTxData(contract, { 
+            calldata: parseBuffer("0xcebc2af4045393280000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000044bf94338e0000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000") ,
+            caller: U256("0x8b09ab0612d4e1d44cf0c1641b5d0be43a3aec9f")
+        }));
+        const buffer = await execWatchInstructions(exec);
+        const result = [...buffer ?? []]
+        const computedAddress = Buffer.from(result).toString('hex').slice(24, 64)
+
+        // check that call has succeeded
+        expect(computedAddress).equals("c3c64414186a912ce0eff30a392cf61bd216b00d")
+    })
+
     it('can call a dummy contract', async () => {
         const dummy = await session.deploy(DUMMY.BYTECODE, newDeployTxData(), {
             name: 'dummy',
