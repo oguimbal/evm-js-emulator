@@ -95,7 +95,7 @@ function showWelcome(newExec: IExecutor) {
     console.log(`CALLDATA: \n    ${calldata.join('\n    ') || '<empty>'}\n`)
 }
 
-function watchInstructions(exec: IExecutor, level: number): boolean {
+export function watchInstructions(exec: IExecutor, level: number): boolean {
     if (!level) {
         return false;
     }
