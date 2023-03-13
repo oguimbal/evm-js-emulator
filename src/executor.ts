@@ -856,7 +856,7 @@ export class Executor implements IExecutor {
         const retSize = this.popAsNum();
 
         // get/download/compile contract
-        const code = await this.state.session.getContract(contract);
+        const code = await this.state.getContract(contract);
 
         // setup context
         const calldata = this.mem.slice(argsOffset, argsSize);
@@ -933,7 +933,7 @@ export class Executor implements IExecutor {
         const retSize = this.popAsNum();
 
         // get/download/compile contract
-        const code = await this.state.session.getContract(contract);
+        const code = await this.state.getContract(contract);
 
         // setup context
         const calldata = this.mem.slice(argsOffset, argsSize);
@@ -969,11 +969,6 @@ export class Executor implements IExecutor {
 
     async doCreate2(salt: UInt256, code: Uint8Array, value: UInt256) {
         const accountAddress = this.computeCreate2Address(salt, code);
-
-        // Deploy options
-        const opts = newDeployTxData({
-            callvalue: value
-        });
 
         const newState = await this.state
             .pushCallTo(accountAddress, value, code, 0x20, this.state.gas);
@@ -1031,7 +1026,7 @@ export class Executor implements IExecutor {
         const retSize = this.popAsNum();
 
         // get/download/compile contract
-        const code = await this.state.session.getContract(contract);
+        const code = await this.state.getContract(contract);
 
         // setup context
         const calldata = this.mem.slice(argsOffset, argsSize);
