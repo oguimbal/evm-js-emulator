@@ -457,9 +457,11 @@ export class Executor implements IExecutor {
         this.state.decrementGas(3);
         this.push(U256(this.state.timestamp));
     }
-    op_number() {
+    @asyncOp()
+    async op_number() {
         this.state.decrementGas(3);
-        throw new Error('not implemented: number');
+        let number = to32ByteBuffer(await this.state.session.rpc.getBlock());
+        this.push(U256(number.buffer));
     }
     op_difficulty() {
         this.state.decrementGas(3);

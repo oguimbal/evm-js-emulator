@@ -44,6 +44,12 @@ describe('Bytecode', () => {
         const chainId = parseInt(toUint(new Uint8Array(result)).toString())
         expect(VALID_CHAIN_IDS.includes(chainId)).to.be.true
     })
+    
+    it('number', async () => {
+        const { result } = await executeBytecode('4360005260206000f3')
+        const blockNumber = parseInt(toUint(new Uint8Array(result)).toString())
+        expect(blockNumber).to.be.gt(0)
+    })
 
     it('add', async () => {
         const { result } = await executeBytecode('600360040160005260ff6000f3')
