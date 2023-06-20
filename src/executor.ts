@@ -812,31 +812,31 @@ export class Executor implements IExecutor {
     }
     op_log0() {
         this.state.decrementGas(3);
-        const log: Log = { address: this.contractAddress, data: this.getData(), topics: [], }
+        const log: Log = { address: this.state.address, data: this.getData(), topics: [], }
         this.logs.push(log);
         this._onLog?.forEach(fn => fn(log));
     }
     op_log1() {
         this.state.decrementGas(3);
-        const log: Log = { address: this.contractAddress, data: this.getData(), topics: [this.pop()], }
+        const log: Log = { address: this.state.address, data: this.getData(), topics: [this.pop()], }
         this.logs.push(log);
         this._onLog?.forEach(fn => fn(log));
     }
     op_log2() {
         this.state.decrementGas(3);
-        const log: Log = { address: this.contractAddress, data: this.getData(), topics: [this.pop(), this.pop()], }
+        const log: Log = { address: this.state.address, data: this.getData(), topics: [this.pop(), this.pop()], }
         this.logs.push(log);
         this._onLog?.forEach(fn => fn(log));
     }
     op_log3() {
         this.state.decrementGas(3);
-        const log: Log = { address: this.contractAddress, data: this.getData(), topics: [this.pop(), this.pop(), this.pop()], }
+        const log: Log = { address: this.state.address, data: this.getData(), topics: [this.pop(), this.pop(), this.pop()], }
         this.logs.push(log);
         this._onLog?.forEach(fn => fn(log));
     }
     op_log4() {
         this.state.decrementGas(3);
-        const log: Log = { address: this.contractAddress, data: this.getData(), topics: [this.pop(), this.pop(), this.pop(), this.pop()], }
+        const log: Log = { address: this.state.address, data: this.getData(), topics: [this.pop(), this.pop(), this.pop(), this.pop()], }
         this.logs.push(log);
         this._onLog?.forEach(fn => fn(log));
     }
