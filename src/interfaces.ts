@@ -111,6 +111,12 @@ export interface SessionOpts {
     /** Discard RPC cache after this period (defaults to 1 day) */
     maxRpcCacheTime?: number;
     contractsNames?: { [key: string]: string | { name: string; abi: utils.Interface } };
+    /** EIPs to take into account (defaults to "all") */
+    eips?: 'all' | EIP;
+}
+
+export interface EIP {
+    eip_3855_push0?: boolean;
 }
 
 export interface ISession {
@@ -122,6 +128,8 @@ export interface ISession {
     prepareStaticCall(contract: HexString | UInt256, calldata: string | Uint8Array, returnDataSize: number): Promise<IExecutor>;
     addNames(names?: SessionOpts['contractsNames']): this;
     deploy(code: string | Buffer | Uint8Array, opts: Omit<NewTxData, 'contract'>, deployOpts?: DeployOpts): Promise<UInt256>;
+    supports(eip: keyof EIP): boolean;
+    checkSupports(eip: keyof EIP): void;
 }
 
 

@@ -6,8 +6,6 @@ import { dumpU256, parseBuffer, shaOf, to32ByteBuffer, toNumberSafe, toUint } fr
 import { Buffer } from 'buffer';
 import { utils } from 'ethers';
 import keccak256 from 'keccak256';
-import { newDeployTxData } from '../tests/test-utils';
-import { MemStorage } from './storage';
 import { compileCode } from './compiler';
 
 const ZERO = U256(0);
@@ -539,6 +537,11 @@ export class Executor implements IExecutor {
         this.push(toUint(new Uint8Array(toPush)));
     }
 
+    op_push0(num: number) {
+        this.state.session.checkSupports('eip_3855_push0');
+        this.state.decrementGas(2);
+        this.push(U256(0));
+    }
     op_push1(num: number) {
         this.state.decrementGas(3);
         this.push(U256(num));
@@ -1068,7 +1071,7 @@ p.op_lt, p.op_gt, p.op_slt, p.op_sgt, p.op_eq, p.op_iszero, p.op_and, p.op_or, p
 p.op_sha3, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused,
 p.op_address, p.op_balance, p.op_origin, p.op_caller, p.op_callvalue, p.op_calldataload, p.op_calldatasize, p.op_calldatacopy, p.op_codesize, p.op_codecopy, p.op_gasprice, p.op_extcodesize, p.op_extcodecopy, p.op_returndatasize, p.op_returndatacopy, p.op_extcodehash,
 p.op_blockhash, p.op_coinbase, p.op_timestamp, p.op_number, p.op_difficulty, p.op_gaslimit, p.op_chainid, p.op_selfbalance, p.op_basefee, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused,
-p.op_pop, p.op_mload, p.op_mstore, p.op_mstore8, p.op_sload, p.op_sstore, p.op_jump, p.op_jumpi, p.op_pc, p.op_msize, p.op_gas, p.op_jumpdest, p.op_unused, p.op_unused, p.op_unused, p.op_unused,
+p.op_pop, p.op_mload, p.op_mstore, p.op_mstore8, p.op_sload, p.op_sstore, p.op_jump, p.op_jumpi, p.op_pc, p.op_msize, p.op_gas, p.op_jumpdest, p.op_unused, p.op_unused, p.op_unused, p.op_push0,
 p.op_push1, p.op_push2, p.op_push3, p.op_push4, p.op_push5, p.op_push6, p.op_push7, p.op_push8, p.op_push9, p.op_push10, p.op_push11, p.op_push12, p.op_push13, p.op_push14, p.op_push15, p.op_push16,
 p.op_push17, p.op_push18, p.op_push19, p.op_push20, p.op_push21, p.op_push22, p.op_push23, p.op_push24, p.op_push25, p.op_push26, p.op_push27, p.op_push28, p.op_push29, p.op_push30, p.op_push31, p.op_push32,
 p.op_dup1, p.op_dup2, p.op_dup3, p.op_dup4, p.op_dup5, p.op_dup6, p.op_dup7, p.op_dup8, p.op_dup9, p.op_dup10, p.op_dup11, p.op_dup12, p.op_dup13, p.op_dup14, p.op_dup15, p.op_dup16,

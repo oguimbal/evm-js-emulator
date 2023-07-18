@@ -4,7 +4,7 @@ import { Buffer } from 'buffer';
 import { compileCode } from './compiler';
 import { newBlockchain, setStorageInstance } from './blockchain-state';
 import { Executor } from './executor';
-import { ExecState, NewTxData, HexString, IExecutor, ISession, isFailure, IStorage, SessionOpts, DeployOpts } from './interfaces';
+import { ExecState, NewTxData, HexString, IExecutor, ISession, isFailure, IStorage, SessionOpts, DeployOpts, EIP } from './interfaces';
 import { RPC } from './rpc';
 import { U256, UInt256 } from './uint256';
 import { parseBuffer, to0xAddress, toAddress, toUint } from './utils';
@@ -23,6 +23,19 @@ export class Session implements ISession {
                 .map(([k, v]) => [k.toLowerCase(), v]));
         }
     }
+
+    supports(eip: keyof EIP): boolean {
+        return !this.opts?.eips
+            || this.opts?.eips === 'all'
+            || !!this.opts.eips[eip];
+    }
+
+    checkSupports(eip: keyof EIP): void {
+        if (!this.supports(eip)) {
+            throw new Error(`EIP ${eip} is not supported. Activate it with the 'eips' argument in options`);
+        }
+    }
+
 
     addNames(names?: SessionOpts['contractsNames']) {
         if (!names) {
