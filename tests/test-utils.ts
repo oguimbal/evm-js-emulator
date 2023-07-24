@@ -70,7 +70,7 @@ function showWelcome(newExec: IExecutor) {
     console.log(`ADDRESS: ${to0xAddress(newExec.state.address)}`);
     console.log(`CALLER: ${to0xAddress(newExec.state.caller)}`);
     console.log(`ORIGIN: ${to0xAddress(newExec.state.origin)}`);
-    console.log(`GAS: 0x${dumpU256(newExec.state.gas)}`);
+    console.log(`GAS: 0x${dumpU256(newExec.gas)}`);
     console.log(`VALUE: 0x${dumpU256(newExec.state.callvalue)}`);
     const calldata = newExec.dumpCalldata();
     const key = to0xAddress(newExec.contractAddress);

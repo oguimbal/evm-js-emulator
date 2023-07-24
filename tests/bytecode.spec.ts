@@ -44,7 +44,7 @@ describe('Bytecode', () => {
         const chainId = parseInt(toUint(new Uint8Array(result)).toString())
         expect(VALID_CHAIN_IDS.includes(chainId)).to.be.true
     })
-    
+
     it('number', async () => {
         const { result } = await executeBytecode('4360005260206000f3')
         const blockNumber = parseInt(toUint(new Uint8Array(result)).toString())
@@ -230,4 +230,13 @@ describe('Bytecode', () => {
         expect(toUint(new Uint8Array(result)))
             .to.deep.eq(new UInt256(3))
     })
+
+    it('gas', async () => {
+        const { result } = await executeBytecode('5A5A9003' + '60005260206000f3'); // gas gas swap1 sub + return
+        const res = toUint(new Uint8Array(result));
+        expect(res)
+            .to.deep.eq(new UInt256(2)); // 'gas' costs 2
+    })
+
+
 })

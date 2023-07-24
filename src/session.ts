@@ -55,7 +55,7 @@ export class Session implements ISession {
         const exec = new Executor(await this.state.newTx({
             ...opts,
             contract: toAddress('0x00'),
-        }), (() => { }) as any); // hack
+        }), opts.gasLimit, (() => { }) as any); // hack
 
         const codeBuffer = toCode(code);
         const contractAddress = await exec.doCreate2(U256(0), codeBuffer, deployOpts?.balance ?? U256(0));
@@ -75,7 +75,7 @@ export class Session implements ISession {
 
     async prepareCall(input: NewTxData): Promise<IExecutor> {
         const code = await this.getContract(input.contract);
-        const exec = new Executor(await this.state.newTx(input), code);
+        const exec = new Executor(await this.state.newTx(input), input.gasLimit, code);
         exec.onResult(ret => {
             if (!isFailure(ret)) {
                 this.state = ret.newState.popCallStack();

@@ -60,12 +60,7 @@ export interface ExecState {
     readonly caller: UInt256;
     readonly origin: UInt256;
 
-    /** How much gas is left */
-    readonly gas: UInt256;
-    /** How much gas has been spent */
-    readonly gasSpent: UInt256;
     readonly gasPrice: UInt256;
-    readonly gasLimit: UInt256;
     readonly callvalue: UInt256;
     readonly calldata: IMemReader;
     readonly static: boolean
@@ -73,8 +68,6 @@ export interface ExecState {
 
 
     newTx(data: NewTxData): Promise<ExecState>;
-
-    decrementGas(num: number | UInt256): void;
 
     getStorage(location: UInt256): Promise<UInt256> | UInt256;
     getStorageOf(dummy: HexString | UInt256): IStorage;
@@ -90,9 +83,9 @@ export interface ExecState {
     mintValue(to: UInt256, value: UInt256): ExecState;
 
     // call stack
-    pushCallTo(contract: UInt256, callValue: UInt256, calldata: Uint8Array, returnDataSize: number, gasLimit: UInt256): Promise<ExecState>;
-    pushDelegatecallTo(contract: UInt256, calldata: Uint8Array, returnDataSize: number, gasLimit: UInt256): ExecState;
-    pushStaticcallTo(contract: UInt256, calldata: Uint8Array, returnDataSize: number, gasLimit: UInt256): ExecState;
+    pushCallTo(contract: UInt256, callValue: UInt256, calldata: Uint8Array, returnDataSize: number): Promise<ExecState>;
+    pushDelegatecallTo(contract: UInt256, calldata: Uint8Array, returnDataSize: number): ExecState;
+    pushStaticcallTo(contract: UInt256, calldata: Uint8Array, returnDataSize: number): ExecState;
     popCallStack(): ExecState;
 }
 
@@ -155,6 +148,7 @@ export interface IExecutor {
     readonly contractAddress: UInt256;
     readonly stack: readonly UInt256[];
     readonly logs: readonly Log[];
+    readonly gas: UInt256;
     execute(): Promise<StopReason>
     watch(handler: (opcode: number, opName: string, paddedOpName: string, opSpy: string[], inKnownSequence: string | null) => any): void;
     onMemChange(fn: (bytes: () => number[]) => void): void;

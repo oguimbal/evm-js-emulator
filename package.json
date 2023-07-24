@@ -1,13 +1,14 @@
 {
   "name": "evm-js-emulator",
-  "version": "0.1.41",
+  "version": "0.1.42",
   "description": "A simple in-memory EVM JS emulator for testing smart contracts",
   "repository": "https://github.com/oguimbal/evm-js-emulator",
   "licence": "MIT",
   "main": "src/index.js",
   "scripts": {
     "build": "rm -rf dist && tsc && cp package.json dist/package.json && cp README.md dist/README.md",
-    "release": "yarn build && cd dist && npm publish"
+    "release": "yarn build && cd dist && npm publish",
+    "typecheck": "tsc --project tsconfig.json --noEmit"
   },
   "author": "Olivier Guimbal",
   "dependencies": {
