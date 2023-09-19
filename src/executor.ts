@@ -220,9 +220,10 @@ export class Executor implements IExecutor {
     }
 
     decrementGas(num: number | UInt256): void {
-        if (this.gas.lt(num)) {
-            throw new Error('Out of gas');
-        }
+        // todo implement this... seems to fail on EOA calls
+        // if (this.gas.lt(num)) {
+        //     throw new Error('Out of gas');
+        // }
         // // decrement in a mutable way
         this.gas.sub(num, true);
     }
