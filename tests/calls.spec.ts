@@ -1,7 +1,7 @@
 import 'mocha';
 import { assert, expect } from 'chai';
 import { Session } from '../src/session';
-import { balanceOf, balanceOfNum, balanceOfUsdc, execWatchInstructions, HAS_USDC, HAS_USDC_RAW, newDeployTxData, newTxData, TEST_SESSION_OPTS, transferEthTo, transferUsdcTo } from './test-utils';
+import { balanceOf, balanceOfNum, balanceOfUsdc, executeBytecode, execWatchInstructions, HAS_USDC, HAS_USDC_RAW, newDeployTxData, newTxData, TEST_SESSION_OPTS, transferEthTo, transferUsdcTo } from './test-utils';
 import { U256 } from '../src/uint256';
 import { DOUBLE_SWAP, DUMMY, REENTRANT } from './bytecodes';
 import { generateAddress, parseBuffer, toNumberSafe, toUint } from '../src/utils';
@@ -17,8 +17,8 @@ describe('Calls', () => {
     it('check create2 with a Polygon Nested WalletFactory', async () => {
         const contract = U256("0xdd64da5ce84bc6f2c130ed2712be9452b5c45839")
 
-        const exec = await session.prepareCall(newTxData(contract, { 
-            calldata: parseBuffer("0xcebc2af4045393280000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000044bf94338e0000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000") ,
+        const exec = await session.prepareCall(newTxData(contract, {
+            calldata: parseBuffer("0xcebc2af4045393280000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000044bf94338e0000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"),
             caller: U256("0x8b09ab0612d4e1d44cf0c1641b5d0be43a3aec9f")
         }));
         const buffer = await execWatchInstructions(exec);
@@ -27,6 +27,25 @@ describe('Calls', () => {
 
         // check that call has succeeded
         expect(computedAddress).equals("c3c64414186a912ce0eff30a392cf61bd216b00d")
+    })
+
+    /**
+     *  
+     * IERC20 token = IERC20(0x078f358208685046a11C85e8ad32895DED33A249);
+        uint256 hash;
+        assembly {
+            hash := extcodehash(token)
+        }
+        return hash;
+     */
+    it('extcodehash on contract address', async () => {
+        const { result } = await executeBytecode('73078f358208685046a11c85e8ad32895ded33a2493f60005260206000f3')
+        expect(toUint(new Uint8Array(result))).to.deep.eq(U256("0x3ebcd59bd9d51bd49cafbb0419423ba025e8e477f34cefa1a71ea3c29b78fa1f"))
+    })
+
+    it('extcodehash on account address', async () => {
+        const { result } = await executeBytecode('738b09ab0612d4e1d44cf0c1641b5d0be43a3aec9f3f60005260206000f3')
+        expect(toUint(new Uint8Array(result))).to.deep.eq(U256(0))
     })
 
     it('can call a dummy contract', async () => {
@@ -99,7 +118,7 @@ describe('Calls', () => {
         await execWatchInstructions(exec);
     });
 
-    it ('Reentrant', async () => {
+    it('Reentrant', async () => {
         const reentrant = await session.deployRaw(REENTRANT.BYTECODE, {
             name: 'Reentrant',
         });

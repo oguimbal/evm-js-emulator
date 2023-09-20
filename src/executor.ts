@@ -456,9 +456,24 @@ export class Executor implements IExecutor {
             this.mem.set(destOffset + i, this.lastReturndata.getByte(offset + i));
         }
     }
-    op_extcodehash() {
+    @asyncOp()
+    async op_extcodehash() {
         this.decrementGas(3);
-        throw new Error('not implemented: extcodehash');
+        const contract = this.pop();
+        const compiledCode = await this.state.getContract(contract);
+
+        if (compiledCode.code.size === 0) {
+            console.warn('Potential divergence with EVM "extcodehash" instruction: Cannot differenciate a non existing account from an EOA => returning 0 like an EOA');
+            this.push(U256(0));
+        } else {
+            const code = compiledCode.code.slice(0, compiledCode.code.size);
+
+            // Hash the code
+            const hashedCode = keccak256(Buffer.from(code));
+            const hash = toUint(hashedCode.subarray());
+
+            this.push(hash);
+        }
     }
     op_blockhash() {
         this.decrementGas(3);
