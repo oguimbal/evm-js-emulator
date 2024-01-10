@@ -45,12 +45,27 @@ export class RPC implements IRpc {
         if (!this.url) {
             throw new Error('Cannot access real blockchain: You must specify a RPC URL');
         }
-        const body =JSON.stringify({
+
+        let bodyParams;
+
+        switch (method) {
+            // This methods don't accept any parameters
+            case 'eth_blockNumber':
+            case 'eth_chainId':
+                bodyParams = params;
+                break;
+            default:
+                bodyParams = block ? [...params, block] : params;
+                break;
+        }
+
+        const body = JSON.stringify({
             "jsonrpc": "2.0",
             "method": method,
-            "params": block ? [...params, block] : params,
+            "params": bodyParams,
             "id": ++id,
         });
+
         const result = await fetch(this.url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -64,7 +79,7 @@ export class RPC implements IRpc {
         }
 
         if (typeof response?.result !== 'string' || !response.result.startsWith('0x')) {
-            throw new Error(`Cannot ${opName}: Unknown response format`);
+            throw new Error(`Cannot ${opName}: Unknown response format: ${response.error}`);
         }
 
         onCache?.(response.result);
@@ -72,7 +87,7 @@ export class RPC implements IRpc {
         this.cache.set(cacheKey, cached);
         return cached;
     }
-    
+
     async getChainId(): Promise<Uint8Array> {
         return await this.fetchBuffer(`get the chain ID`, 'eth_chainId', []);
     }
