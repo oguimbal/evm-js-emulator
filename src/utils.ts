@@ -77,7 +77,7 @@ export function generateAddress(seed: string | Buffer | Uint8Array) {
     return deriveU256FromBuffer(seed, 32 - 20);
 }
 
-const MAX_NUM = U256(Number.MAX_SAFE_INTEGER);
+export const MAX_NUM = U256(Number.MAX_SAFE_INTEGER);
 export function toNumberSafe(num: UInt256): number {
     if (num.gt(MAX_NUM)) {
         throw new Error('not expecting such a high number for this operation');
