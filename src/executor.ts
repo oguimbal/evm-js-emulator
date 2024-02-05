@@ -2,7 +2,7 @@ import { CompiledCode, DeployOpts, ExecState, IExecutor, IMemReader, isFailure, 
 import { MemReader } from './mem-reader';
 import { Memory } from './memory';
 import { UInt256, U256 } from './uint256';
-import { dumpU256, parseBuffer, shaOf, to32ByteBuffer, toNumberSafe, toUint } from './utils';
+import { dumpU256, MAX_NUM, parseBuffer, shaOf, to32ByteBuffer, toNumberSafe, toUint } from './utils';
 import { Buffer } from 'buffer';
 import { utils } from 'ethers';
 import keccak256 from 'keccak256';
@@ -394,7 +394,11 @@ export class Executor implements IExecutor {
     }
     op_calldataload() {
         this.decrementGas(3);
-        const addr = this.popAsNum();
+        const addrBig = this.pop();
+        if (addrBig.gt(MAX_NUM))  {
+            this.push(U256(0));
+        }
+        const addr = parseInt(addrBig.toString());
         const data = this.state.calldata.slice(addr, 32);
         this.push(toUint(data));
     }
