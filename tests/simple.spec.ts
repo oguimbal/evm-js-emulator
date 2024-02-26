@@ -4,6 +4,8 @@ import { executeBytecode, execWatchInstructions, incrementingArray, newTxData, T
 import { dumpU256, generateAddress, to0xAddress, toUint } from '../src/utils';
 import { Session } from '../src/session';
 import { U256 } from '../src';
+import { Executor } from '../src/executor';
+import { MAX_INT256 } from '../src/uint256/arithmetic';
 
 describe('Simple opcodes', () => {
 
@@ -719,5 +721,63 @@ describe('Simple opcodes', () => {
         });
     })
 
+
+    async function fakeExec() {
+        const sess = new Session(TEST_SESSION_OPTS);
+        const tx = await sess.state.newTx({
+            calldata: new Uint8Array(0),
+            gasLimit: U256(MAX_INT256),
+            gasPrice: U256(349834),
+            origin: U256(0),
+            callvalue: U256(0),
+            timestamp: Date.now() / 1000,
+            contract: U256(0),
+            retdatasize: 0,
+            static: false,
+        });
+        return new Executor(tx, U256(MAX_INT256), (() => {}) as any);
+    }
+
+    describe('mstore8', () => {
+
+        it ('can store small', async () => {
+            const exec = await fakeExec()
+            // store something big in memory
+            exec.push(U256('0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF'));
+            exec.push(U256(0)) // offset
+            exec.op_mstore();
+            // store a byte
+            exec.push(U256(0x42)) // value
+            exec.push(U256(1)) // offset
+            exec.op_mstore8();
+
+            // load at 0
+            exec.push(U256(0))
+            exec.op_mload();
+
+            // check result
+            expect(exec.pop().toString(16)).to.equal('ff42ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff');
+        })
+
+
+        it ('can store too big', async () => {
+            const exec = await fakeExec()
+            // store something big in memory
+            exec.push(U256('0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF'));
+            exec.push(U256(0)) // offset
+            exec.op_mstore();
+            // store a byte
+            exec.push(U256(0x4243)) // value
+            exec.push(U256(1)) // offset
+            exec.op_mstore8();
+
+            // load at 0
+            exec.push(U256(0))
+            exec.op_mload();
+
+            // check result
+            expect(exec.pop().toString(16)).to.equal('ff43ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff');
+        })
+    })
 
 });

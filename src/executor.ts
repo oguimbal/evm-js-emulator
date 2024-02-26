@@ -15,7 +15,8 @@ function asyncOp() {
         target[propertyKey].isAsync = true;
     };
 }
-
+const FF = U256(0xff);
+const NFF = U256('0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00');
 export class Executor implements IExecutor {
 
     stack: UInt256[] = [];
@@ -533,8 +534,10 @@ export class Executor implements IExecutor {
     }
     op_mstore8() {
         this.decrementGas(3);
-        const byte = this.pop().shiftRight(0xF0);
-        this.mem.setUint256(this.popAsNum(), byte);
+        const at = this.popAsNum();
+        const byte = this.pop();
+        const toSet = toNumberSafe(byte.and(FF));
+        this.mem.set(at, toSet);
     }
 
     @asyncOp()
