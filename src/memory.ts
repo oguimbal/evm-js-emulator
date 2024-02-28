@@ -1,4 +1,4 @@
-import { UInt256 } from './uint256';
+import { bigIntToBytes, setLengthLeft } from './bytes';
 import { MemReader } from './mem-reader';
 
 export class Memory extends MemReader<number[]> {
@@ -18,9 +18,9 @@ export class Memory extends MemReader<number[]> {
         this.onChange?.();
     }
 
-    setUint256(index: number, value: UInt256) {
+    setUint256(index: number, value: bigint) {
         this.resize(index + 32);
-        const bytes = value.toByteArray();
+        const bytes = setLengthLeft(bigIntToBytes(value), 32)
         for (let i = 0; i < 32; i++) {
             this.mem[index + i] = bytes[i];
         }
@@ -42,12 +42,12 @@ export class Memory extends MemReader<number[]> {
         this.onChange?.();
     }
 
-    get(offset: number): UInt256 {
+    get(offset: number): bigint {
         this.resize(offset + 32); // getting memory triggers a resize if needed
         return super.get(offset);
     }
 
-    getNoResize(offset: number): UInt256 | null {
+    getNoResize(offset: number): bigint | null {
         if (offset >= this.size) {
             return null;
         }

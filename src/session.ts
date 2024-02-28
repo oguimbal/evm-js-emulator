@@ -17,8 +17,7 @@ import {
     EIP,
 } from './interfaces';
 import { RPC } from './rpc';
-import { U256, UInt256 } from './uint256';
-import { parseBuffer, to0xAddress, toAddress, toUint } from './utils';
+import { parseBuffer, toUint } from './utils';
 
 export function newSession(opts?: SessionOpts) {
     return new Session(opts);
@@ -63,18 +62,18 @@ export class Session implements ISession {
         code: string | Buffer | Uint8Array,
         opts: Omit<NewTxData, 'contract'>,
         deployOpts?: DeployOpts,
-    ): Promise<UInt256> {
+    ): Promise<bigint> {
         const exec = new Executor(
             await this.state.newTx({
                 ...opts,
-                contract: toAddress('0x00'),
+                contract: toUint('0x00'),
             }),
             opts.gasLimit,
             (() => {}) as any,
         ); // hack
 
         const codeBuffer = toCode(code);
-        const contractAddress = await exec.doCreate2(U256(0), codeBuffer, deployOpts?.balance ?? U256(0));
+        const contractAddress = await exec.doCreate2(0n, codeBuffer, deployOpts?.balance ?? 0n);
         this.state = exec.state.popCallStack();
         return contractAddress;
     }
@@ -106,30 +105,26 @@ export class Session implements ISession {
         return exec;
     }
 
-    async prepareStaticCall(_contract: HexString | UInt256, calldata: string | Uint8Array, returndatasize: number) {
+    async prepareStaticCall(_contract: HexString | bigint, calldata: string | Uint8Array, returndatasize: number) {
         if (typeof calldata === 'string') {
             calldata = parseBuffer(calldata.startsWith('0x') ? calldata.substring(2) : calldata);
         }
-        const contract = toAddress(_contract);
+        const contract = toUint(_contract);
 
         return this.prepareCall({
             contract,
             static: true,
             calldata,
-            origin: U256(0),
-            callvalue: U256(0),
+            origin: 0n,
+            callvalue: 0n,
             gasLimit: toUint('ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'),
-            gasPrice: U256(349834),
+            gasPrice: 349834n,
             retdatasize: returndatasize,
         });
     }
 
-    async getContract(_contract: HexString | UInt256) {
+    async getContract(_contract: HexString | bigint) {
         return await this.state.getContract(_contract);
-    }
-
-    private contractKey(contract: HexString | UInt256) {
-        return to0xAddress(toAddress(contract));
     }
 }
 

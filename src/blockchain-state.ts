@@ -3,16 +3,15 @@ import { compileCode } from './compiler';
 import { CompiledCode, ExecState, HexString, IMemReader, IRpc, ISession, IStorage, NewTxData } from './interfaces';
 import { MemReader } from './mem-reader';
 import { RpcStorage } from './storage';
-import { U256, UInt256 } from './uint256';
-import { dumpU256, getNodejsLibs, to0xAddress, toAddress } from './utils';
+import { dumpU256, getNodejsLibs, to0xAddress, toUint } from './utils';
 
 interface TxInfo {
     /** tx origin */
-    readonly origin: UInt256;
-    readonly gasPrice: UInt256;
+    readonly origin: bigint;
+    readonly gasPrice: bigint;
     readonly forceTimestamp: number | undefined;
     readonly timestampDelta: number | undefined;
-    readonly difficulty: UInt256;
+    readonly difficulty: bigint;
 }
 
 interface State {
@@ -20,20 +19,20 @@ interface State {
     /** Shared immutable state */
     readonly currentTx: TxInfo;
     /** List of modified/cached storages */
-    readonly storages: ImMap<HexString, IStorage>;
+    readonly storages: ImMap<bigint, IStorage>;
     /** Current stack */
     readonly callStack: List<Stack>;
     /** Deployed contracts */
-    readonly contracts: ImMap<HexString, CompiledCode>;
+    readonly contracts: ImMap<bigint, CompiledCode>;
 }
 interface Stack {
     readonly calldata: IMemReader;
     readonly static: boolean;
-    readonly callValue: UInt256;
-    readonly address: UInt256;
-    readonly caller: UInt256;
+    readonly callValue: bigint;
+    readonly address: bigint;
+    readonly caller: bigint;
     readonly retdatasize: number;
-    readonly currentStorageCtx: UInt256;
+    readonly currentStorageCtx: bigint;
 }
 
 const newStore = Record<State>({
@@ -67,10 +66,10 @@ class BlockchainState implements ExecState {
         return this.store.currentTx.timestampDelta;
     }
 
-    get difficulty(): UInt256 {
+    get difficulty(): bigint {
         return this.store.currentTx.difficulty;
     }
-    get callvalue(): UInt256 {
+    get callvalue(): bigint {
         return this.stack.callValue;
     }
     get calldata(): IMemReader {
@@ -82,46 +81,47 @@ class BlockchainState implements ExecState {
     get session(): ISession {
         return this.store.session;
     }
-    get gasPrice(): UInt256 {
-        return this.shared.gasPrice.copy();
+    get gasPrice(): bigint {
+        return this.shared.gasPrice;
     }
-    get caller(): UInt256 {
+    get caller(): bigint {
         return this.stack.caller;
     }
     get shared(): TxInfo {
         return this.store.currentTx;
     }
-    get address(): UInt256 {
+    get address(): bigint {
         return this.stack.address;
     }
-    get origin(): UInt256 {
+    get origin(): bigint {
         return this.store.currentTx.origin;
     }
 
     private get current0x() {
-        return to0xAddress(this.stack.currentStorageCtx);
+        return this.stack.currentStorageCtx;
     }
     get currentStorage() {
         return this.getStorageOf(this.current0x);
     }
 
 
-    async getContract(hex: HexString | UInt256): Promise<CompiledCode> {
-        hex = typeof hex === 'string' ? hex : to0xAddress(hex);
-        const contractAddress = toAddress(hex);
-        let compiled = this.store.contracts.get(hex);
+    async getContract(hex: HexString | bigint): Promise<CompiledCode> {
+        const contractAddress = typeof hex === 'string' ? toUint(hex) : hex;
+        let compiled = this.store.contracts.get(contractAddress);
 
         if (!compiled) {
-            const code = await this.getBytecodeFromCache(hex);
+            const hex = to0xAddress(contractAddress);
+            const code = await this.getBytecodeFromCache(contractAddress);
             compiled = compileCode(code, this.session.opts?.contractsNames?.[hex], contractAddress, undefined, this.session.opts?.cacheDir);
-            const contracts = this.store.contracts.set(hex, compiled);
+            const contracts = this.store.contracts.set(contractAddress, compiled);
             // it is ok to mutate store, since this is repeteable in case the current tx reverts
             this.store = this.store.set('contracts', contracts);
         }
         return compiled!;
     }
 
-    private async getBytecodeFromCache(contract: HexString) {
+    private async getBytecodeFromCache(contractAddr: bigint) {
+        const contract = to0xAddress(contractAddr);
         const { readCache, writeCache } = getNodejsLibs(this.session.opts?.cacheDir);
         const cacheFile = `bytecode/${contract}.bytecode`;
 
@@ -145,51 +145,49 @@ class BlockchainState implements ExecState {
     }
 
     setContract(contract: CompiledCode): ExecState {
-        const contracts = this.store.contracts.set(to0xAddress(contract.contractAddress), contract);
+        const contracts = this.store.contracts.set(contract.contractAddress, contract);
         return new BlockchainState(this.store.set('contracts', contracts));
     }
 
-    getStorageOf(hex: HexString | UInt256): IStorage {
-        hex = typeof hex === 'string' ? hex : to0xAddress(hex);
+    getStorageOf(hex: HexString | bigint): IStorage {
+        hex = typeof hex === 'string' ? toUint(hex) : hex;
         let cached = this.store.storages.get(hex);
         if (!cached) {
-            const storages = this.store.storages.set(hex, cached = new RpcStorage(hex, this.session.rpc));
+            const storages = this.store.storages.set(hex, cached = new RpcStorage(to0xAddress(hex), this.session.rpc));
             this.store = this.store.set('storages', storages);
         }
         return cached;
     }
 
-    private _changeStorage(hex: HexString, fn: (storage: IStorage) => IStorage) {
-        const currentStorage = this.getStorageOf(hex);
+    private _changeStorage(account: bigint, fn: (storage: IStorage) => IStorage) {
+        const currentStorage = this.getStorageOf(account);
         const newStorage = fn(currentStorage);
-        return new BlockchainState(this.store.set('storages', this.store.storages.set(hex, newStorage)));
+        return new BlockchainState(this.store.set('storages', this.store.storages.set(account, newStorage)));
     }
 
-    getStorage(location: UInt256): UInt256 | Promise<UInt256> {
+    getStorage(location: bigint): bigint | Promise<bigint> {
         return this.currentStorage.get(location);
     }
 
-    getBalance(): UInt256 | Promise<UInt256> {
+    getBalance(): bigint | Promise<bigint> {
         return this.currentStorage.getBalance();
     }
 
-    setStorage(location: UInt256, value: UInt256): ExecState {
+    setStorage(location: bigint, value: bigint): ExecState {
         return this._changeStorage(this.current0x, s => s.set(location, value));
     }
 
 
 
-    async transferFrom(_from: UInt256, _to: UInt256, value: UInt256): Promise<BlockchainState> {
-        if (value.eq(0)) {
+    async transferFrom(from: bigint, to: bigint, value: bigint): Promise<BlockchainState> {
+        if (value === 0n) {
             return this;
         }
-        const from = to0xAddress(_from);
-        const to = to0xAddress(_to);
 
         // check has enough funds
         const fromBalance = await this.getStorageOf(from).getBalance();
-        if (fromBalance.lt(value)) {
-            throw new Error(`Insufficient balance in ${from} to transfer ${dumpU256(value)} to ${to}`);
+        if (fromBalance<value) {
+            throw new Error(`Insufficient balance in ${to0xAddress(from)} to transfer ${dumpU256(value)} to ${to}`);
         }
 
         // modify state
@@ -198,12 +196,12 @@ class BlockchainState implements ExecState {
     }
 
 
-    transfer(_to: UInt256, value: UInt256): Promise<BlockchainState> {
+    transfer(_to: bigint, value: bigint): Promise<BlockchainState> {
         return this.transferFrom(this.stack.currentStorageCtx, _to, value);
     }
 
-    mintValue(toAddress: UInt256, value: UInt256) {
-        return this._changeStorage(to0xAddress(toAddress), s => s.incrementBalance(value));
+    mintValue(toAddress: bigint, value: bigint) {
+        return this._changeStorage(toAddress, s => s.incrementBalance(value));
     }
 
     async newTx(data: NewTxData): Promise<ExecState> {
@@ -228,7 +226,7 @@ class BlockchainState implements ExecState {
                 timestampDelta: data.timestampDelta,
                 gasPrice: data.gasPrice,
                 origin: data.origin,
-                difficulty: data.difficulty ?? U256(0),
+                difficulty: data.difficulty ?? 0n,
             })
         )
         ret = await ret.transferFrom(full.caller, full.address, full.callValue)
@@ -242,11 +240,11 @@ class BlockchainState implements ExecState {
         })));
     }
 
-    setStorageLocation(address: UInt256, storage: IStorage): ExecState {
+    setStorageLocation(address: bigint, storage: IStorage): ExecState {
         throw new Error('Method not implemented.');
     }
 
-    async pushCallTo(contract: UInt256, callValue: UInt256, calldata: Uint8Array, retdatasize: number): Promise<ExecState> {
+    async pushCallTo(contract: bigint, callValue: bigint, calldata: Uint8Array, retdatasize: number): Promise<ExecState> {
         if (this.static) {
             throw new Error('Opcode "call" is not valid on a static execution context');
         }
@@ -265,19 +263,19 @@ class BlockchainState implements ExecState {
         })
     }
 
-    pushDelegatecallTo(contract: UInt256, calldata: Uint8Array, retdatasize: number): ExecState {
+    pushDelegatecallTo(contract: bigint, calldata: Uint8Array, retdatasize: number): ExecState {
         return this.pushCallStack({
             ...this._buildStack(calldata, retdatasize),
         });
     }
 
-    pushStaticcallTo(contract: UInt256, calldata: Uint8Array, retdatasize: number): ExecState {
+    pushStaticcallTo(contract: bigint, calldata: Uint8Array, retdatasize: number): ExecState {
         return this.pushCallStack({
             ...this._buildStack(calldata, retdatasize),
             address: contract, // only change contract address
             currentStorageCtx: contract,  // switch to the called contract's context  (balance & storage)
             caller: this.address,
-            callValue: U256(0),
+            callValue: 0n,
             static: true,
         });
     }
@@ -299,13 +297,13 @@ class BlockchainState implements ExecState {
     }
 
     /** @deprecated use with care */
-    setStorageInstance(contract: UInt256, storage: IStorage) {
-        this.store = this.store.set('storages', this.store.storages.set(to0xAddress(contract), storage));
+    setStorageInstance(contract: bigint, storage: IStorage) {
+        this.store = this.store.set('storages', this.store.storages.set(contract, storage));
     }
 
 }
 
 /** @deprecated use with care */
-export function setStorageInstance(inState: ExecState, contract: UInt256, storage: IStorage) {
+export function setStorageInstance(inState: ExecState, contract: bigint, storage: IStorage) {
     return (inState as BlockchainState).setStorageInstance(contract, storage);
 }

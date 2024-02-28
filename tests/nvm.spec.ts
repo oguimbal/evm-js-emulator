@@ -3,13 +3,13 @@ import { assert, expect } from 'chai';
 import { Buffer } from 'buffer';
 import { Session } from '../src/session';
 import { execWatchInstructions, newDeployTxData, newTxData, TEST_SESSION_OPTS, transferUsdcTo } from './test-utils';
-import { from0x, generateAddress, parseBuffer, to0xAddress, toNumberSafe, toUint } from '../src/utils';
-import { U256, UInt256 } from '../src/uint256';
+import { parseBuffer, to0xAddress, toNumberSafe, toUint } from '../src/utils';
 import { NewTxData } from '../src/interfaces';
 import { DOUBLE_SWAP, DUMMY, HyVM, HyVM_CALLER } from './bytecodes';
+import { toBytes32 } from '../src/bytes';
 
 describe('HyVM executions', () => {
-    let hyvmContract: UInt256;
+    let hyvmContract: bigint;
     let session: Session;
 
     beforeEach(async () => {
@@ -53,7 +53,7 @@ describe('HyVM executions', () => {
         const dummy = await callSetDummy();
 
         // check that the target contract has 0x42 in its storage at address 0
-        const data = await session.state.getStorageOf(dummy).get(U256(0));
+        const data = await session.state.getStorageOf(dummy).get(0n);
         expect(toNumberSafe(data)).to.equal(0x42);
     })
 
@@ -63,7 +63,7 @@ describe('HyVM executions', () => {
 
         const result = await executeHyVM(DUMMY.CALL_GETTER(dummy))
 
-        expect([...result ?? []]).to.deep.equal([...U256(0x42).toByteArray()]);
+        expect([...result ?? []]).to.deep.equal([...toBytes32(0x42)]);
     })
 
 

@@ -1,25 +1,63 @@
-import { CompiledCode, DeployOpts, ExecState, IExecutor, IMemReader, isFailure, isSuccess, Log, OnEndedCall, OnLog, OnStartingCall, StopReason } from './interfaces';
+import {
+    CompiledCode,
+    DeployOpts,
+    ExecState,
+    IExecutor,
+    IMemReader,
+    isFailure,
+    isSuccess,
+    Log,
+    OnEndedCall,
+    OnLog,
+    OnStartingCall,
+    StopReason,
+} from './interfaces';
 import { MemReader } from './mem-reader';
 import { Memory } from './memory';
-import { UInt256, U256 } from './uint256';
-import { dumpU256, MAX_NUM, parseBuffer, shaOf, to32ByteBuffer, toNumberSafe, toUint } from './utils';
+import { dumpU256, parseBuffer, toNumberSafe, toUint } from './utils';
 import { Buffer } from 'buffer';
 import { utils } from 'ethers';
-import keccak256 from 'keccak256';
 import { compileCode } from './compiler';
+import {
+    BIGINT_0,
+    BIGINT_1,
+    BIGINT_160,
+    BIGINT_2,
+    BIGINT_224,
+    BIGINT_255,
+    BIGINT_256,
+    BIGINT_2EXP160,
+    BIGINT_2EXP224,
+    BIGINT_2EXP96,
+    BIGINT_31,
+    BIGINT_32,
+    BIGINT_7,
+    BIGINT_8,
+    BIGINT_96,
+    exponentiation,
+    fromTwos,
+    MAX_INTEGER_BIGINT,
+    MAX_NUM,
+    mod,
+    toTwos,
+    TWO_POW256,
+} from './arithmetic';
+import { keccak256 } from 'ethereum-cryptography/keccak.js';
+import { bytesToHex } from './bytes';
 
-const ZERO = U256(0);
+// https://github.com/ethereumjs/ethereumjs-monorepo/blob/d89a96382716b028b5bcc04014e701cfa98eeda8/packages/evm/src/opcodes/functions.ts#L172
 
 function asyncOp() {
     return function (target: any, propertyKey: string, descriptor: PropertyDescriptor) {
         target[propertyKey].isAsync = true;
     };
 }
-const FF = U256(0xff);
-const NFF = U256('0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00');
-export class Executor implements IExecutor {
 
-    stack: UInt256[] = [];
+const MAX_HEIGHT = 1024;
+
+export class Executor implements IExecutor {
+    private _stack: bigint[] = [];
+    private _len = 0;
     private mem = new Memory();
     readonly logs: Log[] = [];
     private stop: StopReason | null = null;
@@ -33,27 +71,24 @@ export class Executor implements IExecutor {
     private run: () => void;
     private lastReturndata: MemReader = new MemReader([]);
     private knownSequence: string | null = null;
-    gas: UInt256;
-
+    gas: bigint;
 
     get contractName(): string {
         return this.code.contractName ?? dumpU256(this.code.contractAddress);
     }
 
-
     get contractAbi(): utils.Interface | undefined {
         return this.code.contractAbi;
     }
 
-
-    get contractAddress(): UInt256 {
+    get contractAddress(): bigint {
         return this.code.contractAddress;
     }
 
     //  private contract: ContractState, private opts: ExecutionOptions
-    constructor(public state: ExecState, private gasLimit: UInt256, private code: CompiledCode) {
+    constructor(public state: ExecState, private gasLimit: bigint, private code: CompiledCode) {
         this.run = code(this);
-        this.gas = gasLimit.copy();
+        this.gas = gasLimit;
     }
 
     async execute(): Promise<StopReason> {
@@ -73,12 +108,18 @@ export class Executor implements IExecutor {
         return result;
     }
 
-    get gasSpent(): UInt256 {
-        return this.gasLimit.sub(this.gas);
+    copyStack(): readonly bigint[] {
+        return this._stack.slice(0, this._len);
+    }
+
+    get gasSpent(): bigint {
+        return this.gasLimit - this.gas;
     }
 
     dumpStack() {
-        return this.stack.map(i => dumpU256(i)).reverse();
+        return this.copyStack()
+            .map(i => dumpU256(i))
+            .reverse();
     }
 
     dumpCalldata() {
@@ -123,42 +164,56 @@ export class Executor implements IExecutor {
         }
     }
 
-    watch(handler: (opcode: number, opName: string, paddedOpName: string, opSpy: string[], knownSeq: string | null) => any) {
-        this.spyOps((fn, opname, padded, opcode) => fn.isAsync
-            ? async (...args: any[]) => {
-                const spy = this.opSpy = [];
-                await fn(...args);
-                this.opSpy = null;
-                handler(opcode, opname, padded, spy, this.knownSequence);
-            } : (...args: any[]) => {
-                const spy = this.opSpy = [];
-                fn(...args);
-                this.opSpy = null;
-                handler(opcode, opname, padded, spy, this.knownSequence);
-            });
+    watch(
+        handler: (
+            opcode: number,
+            opName: string,
+            paddedOpName: string,
+            opSpy: string[],
+            knownSeq: string | null,
+        ) => any,
+    ) {
+        this.spyOps((fn, opname, padded, opcode) =>
+            fn.isAsync
+                ? async (...args: any[]) => {
+                      const spy = (this.opSpy = []);
+                      await fn(...args);
+                      this.opSpy = null;
+                      handler(opcode, opname, padded, spy, this.knownSequence);
+                  }
+                : (...args: any[]) => {
+                      const spy = (this.opSpy = []);
+                      fn(...args);
+                      this.opSpy = null;
+                      handler(opcode, opname, padded, spy, this.knownSequence);
+                  },
+        );
     }
 
     onMemChange(fn: (bytes: () => number[]) => void) {
         this._onMemChange ??= [];
         this._onMemChange?.push(fn);
-        this.mem.onChange = () => this.notifyMemChanged = true;
+        this.mem.onChange = () => (this.notifyMemChanged = true);
         const notif = () => {
             if (this.notifyMemChanged) {
                 let dumped: number[] | undefined = undefined;
-                const cloned = () => dumped ??= this.mem.dump();
+                const cloned = () => (dumped ??= this.mem.dump());
                 this._onMemChange?.forEach(c => c(cloned));
             }
-        }
-        this.spyOps(o => o.isAsync
-            ? async (...args: any[]) => {
-                this.notifyMemChanged = false;
-                await o(...args);
-                notif()
-            } : (...args: any[]) => {
-                this.notifyMemChanged = false;
-                o(...args);
-                notif()
-            });
+        };
+        this.spyOps(o =>
+            o.isAsync
+                ? async (...args: any[]) => {
+                      this.notifyMemChanged = false;
+                      await o(...args);
+                      notif();
+                  }
+                : (...args: any[]) => {
+                      this.notifyMemChanged = false;
+                      o(...args);
+                      notif();
+                  },
+        );
     }
     onStartingCall(fn: OnStartingCall): void {
         this._onStartCall ??= [];
@@ -177,11 +232,35 @@ export class Executor implements IExecutor {
     onResult(handler: (ret: StopReason) => void) {
         this._onResult.push(handler);
     }
-    pop(): UInt256 {
-        const ret = this.stack.pop();
-        if (!ret) {
+    popN(num: number): bigint[] {
+        if (this._len < num) {
             throw new Error('stack undeflow');
         }
+
+        if (num === 0) {
+            return [];
+        }
+
+        const arr = Array(num);
+        const cache = this._stack;
+
+        for (let pop = 0; pop < num; pop++) {
+            // Note: this thus also (correctly) reduces the length of the internal array (without deleting items)
+            arr[pop] = cache[--this._len];
+        }
+
+        if (this.opSpy) {
+            for (const r of arr) {
+                this.opSpy.push(dumpU256(r));
+            }
+        }
+        return arr;
+    }
+    pop(): bigint {
+        if (this._len < 1) {
+            throw new Error('stack undeflow');
+        }
+        const ret = this._stack[--this._len];
         this.opSpy?.push(dumpU256(ret));
         return ret;
     }
@@ -193,7 +272,7 @@ export class Executor implements IExecutor {
 
     popAsBool(): boolean {
         const poped = this.pop();
-        return !poped.eq(0);
+        return !!poped;
     }
 
     startKnownSequence(seq: string) {
@@ -204,29 +283,68 @@ export class Executor implements IExecutor {
         this.knownSequence = null;
     }
 
-    getStack(n: number) {
-        const at = this.stack.length - n;
-        if (at < 0) {
-            throw new Error('not enough values on stack');
+    /**
+     * Swap top of stack with an item in the stack.
+     * @param position - Index of item from top of the stack (0-indexed)
+     */
+    swap(position: number) {
+        if (this._len <= position) {
+            throw new Error('stack undeflow');
         }
-        return this.stack[at].copy();
-    }
-    push(elt: UInt256) {
-        this.opSpy?.push(`➡ ${dumpU256(elt)}`);
-        this.stack.push(elt);
-    }
-    pushBool(elt: boolean) {
-        this.opSpy?.push(`➡ ${elt ? '1' : '0'}`);
-        this.stack.push(elt ? U256(1) : U256(0));
+
+        const head = this._len - 1;
+        const i = head - position;
+        const storageCached = this._stack;
+
+        const tmp = storageCached[head];
+        storageCached[head] = storageCached[i];
+        storageCached[i] = tmp;
     }
 
-    decrementGas(num: number | UInt256): void {
+    /**
+     * Pushes a copy of an item in the stack.
+     * @param position - Index of item to be copied (1-indexed)
+     */
+    // I would say that we do not need this method any more
+    // since you can't copy a primitive data type
+    // Nevertheless not sure if we "loose" something here?
+    // Will keep commented out for now
+    dup(position: number) {
+        const len = this._len;
+        if (len < position) {
+            throw new Error('stack undeflow');
+        }
+
+        // Note: this code is borrowed from `push()` (avoids a call)
+        if (len >= MAX_HEIGHT) {
+            throw new Error('stack overflow');
+        }
+
+        const i = len - position;
+        this.opSpy?.push(`➡ ${dumpU256(this._stack[i])}`);
+        this._stack[this._len++] = this._stack[i];
+    }
+
+    push(value: bigint) {
+        this.opSpy?.push(`➡ ${dumpU256(value)}`);
+        if (this._len >= MAX_HEIGHT) {
+            throw new Error('stack overflow');
+        }
+
+        // Read current length, set `_store` to value, and then increase the length
+        this._stack[this._len++] = value;
+    }
+    pushBool(elt: boolean) {
+        this.push(elt ? 1n : 0n);
+    }
+
+    decrementGas(num: number | bigint): void {
         // todo implement this... seems to fail on EOA calls
         // if (this.gas.lt(num)) {
         //     throw new Error('Out of gas');
         // }
         // // decrement in a mutable way
-        this.gas.sub(num, true);
+        this.gas -= BigInt(num);
     }
 
     op_stop() {
@@ -239,66 +357,130 @@ export class Executor implements IExecutor {
     }
     op_add() {
         this.decrementGas(3);
-        this.push(this.pop().add(this.pop()));
+        const [a, b] = this.popN(2);
+        const r = mod(a + b, TWO_POW256);
+        this.push(r);
     }
     op_mul() {
         this.decrementGas(3);
-        this.push(this.pop().mul(this.pop()));
+        const [a, b] = this.popN(2);
+        const r = mod(a * b, TWO_POW256);
+        this.push(r);
     }
     op_sub() {
         this.decrementGas(3);
-        const a = this.pop();
-        const b = this.pop();
-        this.push(a.sub(b));
+        const [a, b] = this.popN(2);
+        const r = mod(a - b, TWO_POW256);
+        this.push(r);
     }
     op_div() {
         this.decrementGas(3);
-        this.push(this.pop().div(this.pop()));
+        const [a, b] = this.popN(2);
+        let r;
+        if (b === BIGINT_0) {
+            r = BIGINT_0;
+        } else {
+            r = mod(a / b, TWO_POW256);
+        }
+        this.push(r);
     }
     op_sdiv() {
         this.decrementGas(3);
-        this.push(this.pop().sdiv(this.pop()));
+        const [a, b] = this.popN(2);
+        let r;
+        if (b === BIGINT_0) {
+            r = BIGINT_0;
+        } else {
+            r = toTwos(fromTwos(a) / fromTwos(b));
+        }
+        this.push(r);
     }
     op_mod() {
         this.decrementGas(3);
-        this.push(this.pop().mod(this.pop()));
+        const [a, b] = this.popN(2);
+        let r;
+        if (b === BIGINT_0) {
+            r = b;
+        } else {
+            r = mod(a, b);
+        }
+        this.push(r);
     }
     op_smod() {
         this.decrementGas(3);
-        this.push(this.pop().smod(this.pop()));
+        const [a, b] = this.popN(2);
+        let r;
+        if (b === BIGINT_0) {
+            r = b;
+        } else {
+            r = fromTwos(a) % fromTwos(b);
+        }
+        this.push(toTwos(r));
     }
     op_addmod() {
         this.decrementGas(3);
-        throw new Error('not implemented: addmod');
+        const [a, b, c] = this.popN(3);
+        let r;
+        if (c === BIGINT_0) {
+            r = BIGINT_0;
+        } else {
+            r = mod(a + b, c);
+        }
+        this.push(r);
     }
     op_mulmod() {
         this.decrementGas(3);
-        this.push(this.pop().mul(this.pop()).mod(this.pop()))
+        const [a, b, c] = this.popN(3);
+        let r;
+        if (c === BIGINT_0) {
+            r = BIGINT_0;
+        } else {
+            r = mod(a * b, c);
+        }
+        this.push(r);
     }
     op_exp() {
         this.decrementGas(3);
-        const a = this.pop();
-        const exp = this.popAsNum();
-        this.push(a.pow(exp));
+        const [base, exponent] = this.popN(2);
+        if (base === BIGINT_2) {
+            switch (exponent) {
+                case BIGINT_96:
+                    this.push(BIGINT_2EXP96);
+                    return;
+                case BIGINT_160:
+                    this.push(BIGINT_2EXP160);
+                    return;
+                case BIGINT_224:
+                    this.push(BIGINT_2EXP224);
+                    return;
+            }
+        }
+        if (exponent === BIGINT_0) {
+            this.push(BIGINT_1);
+            return;
+        }
+
+        if (base === BIGINT_0) {
+            this.push(base);
+            return;
+        }
+        const r = exponentiation(base, exponent);
+        this.push(r);
     }
     op_signextend() {
         this.decrementGas(3);
         // https://ethereum.stackexchange.com/questions/63062/evm-signextend-opcode-explanation
-        const b = this.popAsNum();
-        const x = this.pop();
-        const leftMost = (b + 1) * 8 - 1;
-        const isNeg = x.testBit(leftMost);
-        const copy = x.copy();
-        if (isNeg) {
-            for (let i = leftMost; i < 256; i++) {
-                copy.setBit(i, true);
-            }
-        } else {
-            for (let i = leftMost; i < 256; i++) {
-                copy.clearBit(i, true);
+        let [k, val] = this.popN(2);
+        if (k < BIGINT_31) {
+            const signBit = k * BIGINT_8 + BIGINT_7;
+            const mask = (BIGINT_1 << signBit) - BIGINT_1;
+            if ((val >> signBit) & BIGINT_1) {
+                val = val | BigInt.asUintN(256, ~mask);
+            } else {
+                val = val & mask;
             }
         }
-        this.push(copy);
+        this.push(val);
     }
     op_unused() {
         this.decrementGas(3);
@@ -306,69 +488,129 @@ export class Executor implements IExecutor {
     }
     op_lt() {
         this.decrementGas(3);
-        this.pushBool(this.pop().lt(this.pop()));
+        const [a, b] = this.popN(2);
+        const r = a < b ? BIGINT_1 : BIGINT_0;
+        this.push(r);
     }
     op_gt() {
         this.decrementGas(3);
-        this.pushBool(this.pop().gt(this.pop()));
+        const [a, b] = this.popN(2);
+        const r = a > b ? BIGINT_1 : BIGINT_0;
+        this.push(r);
     }
     op_slt() {
         this.decrementGas(3);
-        this.pushBool(this.pop().slt(this.pop()));
+        const [a, b] = this.popN(2);
+        const r = fromTwos(a) < fromTwos(b) ? BIGINT_1 : BIGINT_0;
+        this.push(r);
     }
     op_sgt() {
         this.decrementGas(3);
-        this.pushBool(this.pop().sgt(this.pop()));
+        const [a, b] = this.popN(2);
+        const r = fromTwos(a) > fromTwos(b) ? BIGINT_1 : BIGINT_0;
+        this.push(r);
     }
     op_eq() {
         this.decrementGas(3);
-        this.pushBool(this.pop().eq(this.pop()));
+        const [a, b] = this.popN(2);
+        const r = a === b ? BIGINT_1 : BIGINT_0;
+        this.push(r);
     }
     op_iszero() {
         this.decrementGas(3);
-        this.pushBool(this.pop().eq(ZERO));
+        const a = this.pop();
+        const r = a === BIGINT_0 ? BIGINT_1 : BIGINT_0;
+        this.push(r);
     }
     op_and() {
         this.decrementGas(3);
-        this.push(this.pop().and(this.pop()));
+        const [a, b] = this.popN(2);
+        const r = a & b;
+        this.push(r);
     }
     op_or() {
         this.decrementGas(3);
-        this.push(this.pop().or(this.pop()));
+        const [a, b] = this.popN(2);
+        const r = a | b;
+        this.push(r);
     }
     op_xor() {
         this.decrementGas(3);
-        this.push(this.pop().xor(this.pop()));
+        const [a, b] = this.popN(2);
+        const r = a ^ b;
+        this.push(r);
     }
     op_not() {
         this.decrementGas(3);
-        this.push(this.pop().not(true));
+        const a = this.pop();
+        const r = BigInt.asUintN(256, ~a);
+        this.push(r);
     }
     op_byte() {
         this.decrementGas(3);
-        const i = this.popAsNum();
-        const x = this.pop().toByteArray();
-        this.push(U256(x[i]));
+        const [pos, word] = this.popN(2);
+        if (pos > BIGINT_32) {
+            this.push(BIGINT_0);
+            return;
+        }
+
+        const r = (word >> ((BIGINT_31 - pos) * BIGINT_8)) & BIGINT_255;
+        this.push(r);
     }
     op_shl() {
         this.decrementGas(3);
-        const n = this.popAsNum();
-        this.push(this.pop().shiftLeft(n));
+        const [a, b] = this.popN(2);
+        if (a > BIGINT_256) {
+            this.push(BIGINT_0);
+            return;
+        }
+
+        const r = (b << a) & MAX_INTEGER_BIGINT;
+        this.push(r);
     }
     op_shr() {
         this.decrementGas(3);
-        const n = this.popAsNum();
-        this.push(this.pop().shiftRight(n));
+        const [a, b] = this.popN(2);
+        if (a > 256) {
+            this.push(BIGINT_0);
+            return;
+        }
+
+        const r = b >> a;
+        this.push(r);
     }
     op_sar() {
         this.decrementGas(3);
-        const n = this.popAsNum();
-        this.push(this.pop().sar(n))
+        const [a, b] = this.popN(2);
+
+        let r;
+        const bComp = BigInt.asIntN(256, b);
+        const isSigned = bComp < 0;
+        if (a > 256) {
+            if (isSigned) {
+                r = MAX_INTEGER_BIGINT;
+            } else {
+                r = BIGINT_0;
+            }
+            this.push(r);
+            return;
+        }
+
+        const c = b >> a;
+        if (isSigned) {
+            const shiftedOutWidth = BIGINT_255 - a;
+            const mask = (MAX_INTEGER_BIGINT >> shiftedOutWidth) << shiftedOutWidth;
+            r = c | mask;
+        } else {
+            r = c;
+        }
+        this.push(r);
     }
     op_sha3() {
         this.decrementGas(3);
         const toHash = this.getData();
-        this.push(shaOf(toHash));
+        const r = BigInt(bytesToHex(keccak256(toHash)));
+        this.push(r);
     }
     op_address() {
         this.decrementGas(3);
@@ -396,16 +638,17 @@ export class Executor implements IExecutor {
     op_calldataload() {
         this.decrementGas(3);
         const addrBig = this.pop();
-        if (addrBig.gt(MAX_NUM))  {
-            this.push(U256(0));
+        if (addrBig > MAX_NUM) {
+            this.push(0n);
+            return;
         }
-        const addr = parseInt(addrBig.toString());
+        const addr = Number(addrBig);
         const data = this.state.calldata.slice(addr, 32);
         this.push(toUint(data));
     }
     op_calldatasize() {
         this.decrementGas(3);
-        this.push(U256(this.state.calldata.size));
+        this.push(BigInt(this.state.calldata.size));
     }
     op_calldatacopy() {
         this.decrementGas(3);
@@ -413,7 +656,7 @@ export class Executor implements IExecutor {
     }
     op_codesize() {
         this.decrementGas(3);
-        this.push(U256(this.code.code.size));
+        this.push(BigInt(this.code.code.size));
     }
     op_codecopy() {
         this.decrementGas(3);
@@ -436,7 +679,7 @@ export class Executor implements IExecutor {
     async op_extcodesize() {
         const address = this.pop();
         const contract = await this.state.getContract(address);
-        this.push(U256(contract.code?.size ?? 0));
+        this.push(BigInt(contract.code?.size ?? 0));
     }
     op_extcodecopy() {
         this.decrementGas(3);
@@ -444,7 +687,7 @@ export class Executor implements IExecutor {
     }
     op_returndatasize() {
         this.decrementGas(3);
-        this.push(U256(this.lastReturndata.size));
+        this.push(BigInt(this.lastReturndata.size));
     }
     op_returndatacopy() {
         this.decrementGas(3);
@@ -455,7 +698,9 @@ export class Executor implements IExecutor {
             return;
         }
         if (offset >= this.lastReturndata.size) {
-            throw new Error(`Cannot execute "returndatacopy" of ${size} bytes at an index (${offset}) that is higher than "returndatasize" (${this.lastReturndata.size})`);
+            throw new Error(
+                `Cannot execute "returndatacopy" of ${size} bytes at an index (${offset}) that is higher than "returndatasize" (${this.lastReturndata.size})`,
+            );
         }
         for (let i = 0; i < size; i++) {
             this.mem.set(destOffset + i, this.lastReturndata.getByte(offset + i));
@@ -468,13 +713,15 @@ export class Executor implements IExecutor {
         const compiledCode = await this.state.getContract(contract);
 
         if (compiledCode.code.size === 0) {
-            console.warn('Potential divergence with EVM "extcodehash" instruction: Cannot differenciate a non existing account from an EOA => returning 0 like an EOA');
-            this.push(U256(0));
+            console.warn(
+                'Potential divergence with EVM "extcodehash" instruction: Cannot differenciate a non existing account from an EOA => returning 0 like an EOA',
+            );
+            this.push(0n);
         } else {
             const code = compiledCode.code.slice(0, compiledCode.code.size);
 
             // Hash the code
-            const hashedCode = keccak256(Buffer.from(code));
+            const hashedCode = keccak256(code);
             const hash = toUint(hashedCode.subarray());
 
             this.push(hash);
@@ -492,22 +739,22 @@ export class Executor implements IExecutor {
     async op_timestamp() {
         this.decrementGas(3);
         if (this.state.forceTimestamp) {
-            this.push(U256(this.state.forceTimestamp));
+            this.push(BigInt(this.state.forceTimestamp));
             return;
         }
         const delta = this.state.timestampDelta ?? 0;
         const ts = await this.state.session.rpc.getTimestamp();
-        this.push(U256(ts + delta));
+        this.push(BigInt(ts + delta));
     }
     @asyncOp()
     async op_number() {
         this.decrementGas(3);
-        let number = to32ByteBuffer(await this.state.session.rpc.getBlock());
-        this.push(U256(number.buffer));
+        let number = toUint(await this.state.session.rpc.getBlock());
+        this.push(toUint(number));
     }
     op_difficulty() {
         this.decrementGas(3);
-        this.push(this.state.difficulty.copy());
+        this.push(this.state.difficulty);
     }
     op_gaslimit() {
         this.decrementGas(3);
@@ -516,8 +763,9 @@ export class Executor implements IExecutor {
     @asyncOp()
     async op_chainid() {
         this.decrementGas(3);
-        let chainId = to32ByteBuffer(await this.state.session.rpc.getChainId());
-        this.push(U256(chainId.buffer));
+        const chainRaw = await this.state.session.rpc.getChainId();
+        let chainId = toUint(chainRaw);
+        this.push(toUint(chainId));
     }
     @asyncOp()
     async op_selfbalance() {
@@ -537,19 +785,20 @@ export class Executor implements IExecutor {
     }
     op_mstore() {
         this.decrementGas(3);
-        this.mem.setUint256(this.popAsNum(), this.pop())
+        this.mem.setUint256(this.popAsNum(), this.pop());
     }
     op_mstore8() {
         this.decrementGas(3);
         const at = this.popAsNum();
         const byte = this.pop();
-        const toSet = toNumberSafe(byte.and(FF));
+        const toSet = toNumberSafe(byte & 255n);
         this.mem.set(at, toSet);
     }
 
     @asyncOp()
     async op_sload() {
-        this.push(await this.state.getStorage(this.pop()));
+        const data = await this.state.getStorage(this.pop());
+        this.push(data);
     }
     op_sstore() {
         this.decrementGas(3);
@@ -565,15 +814,15 @@ export class Executor implements IExecutor {
     }
     op_pc(num: number) {
         this.decrementGas(3);
-        this.push(U256(num));
+        this.push(BigInt(num));
     }
     op_msize() {
         this.decrementGas(3);
-        this.push(U256(this.mem.size))
+        this.push(BigInt(this.mem.size));
     }
     op_gas() {
         this.decrementGas(2);
-        this.push(this.gas.copy());
+        this.push(this.gas);
     }
     op_jumpdest() {
         this.decrementGas(3);
@@ -586,11 +835,11 @@ export class Executor implements IExecutor {
     op_push0(num: number) {
         this.state.session.checkSupports('eip_3855_push0');
         this.decrementGas(2);
-        this.push(U256(0));
+        this.push(0n);
     }
     op_push1(num: number) {
         this.decrementGas(3);
-        this.push(U256(num));
+        this.push(BigInt(num));
     }
     op_push2(data: number[]) {
         this.decrementGas(3);
@@ -718,140 +967,132 @@ export class Executor implements IExecutor {
     }
     op_dup1() {
         this.decrementGas(3);
-        this.push(this.getStack(1));
+        this.dup(1);
     }
     op_dup2() {
         this.decrementGas(3);
-        this.push(this.getStack(2));
+        this.dup(2);
     }
     op_dup3() {
         this.decrementGas(3);
-        this.push(this.getStack(3));
+        this.dup(3);
     }
     op_dup4() {
         this.decrementGas(3);
-        this.push(this.getStack(4));
+        this.dup(4);
     }
     op_dup5() {
         this.decrementGas(3);
-        this.push(this.getStack(5));
+        this.dup(5);
     }
     op_dup6() {
         this.decrementGas(3);
-        this.push(this.getStack(6));
+        this.dup(6);
     }
     op_dup7() {
         this.decrementGas(3);
-        this.push(this.getStack(7));
+        this.dup(7);
     }
     op_dup8() {
         this.decrementGas(3);
-        this.push(this.getStack(8));
+        this.dup(8);
     }
     op_dup9() {
         this.decrementGas(3);
-        this.push(this.getStack(9));
+        this.dup(9);
     }
     op_dup10() {
         this.decrementGas(3);
-        this.push(this.getStack(10));
+        this.dup(10);
     }
     op_dup11() {
         this.decrementGas(3);
-        this.push(this.getStack(11));
+        this.dup(11);
     }
     op_dup12() {
         this.decrementGas(3);
-        this.push(this.getStack(12));
+        this.dup(12);
     }
     op_dup13() {
         this.decrementGas(3);
-        this.push(this.getStack(13));
+        this.dup(13);
     }
     op_dup14() {
         this.decrementGas(3);
-        this.push(this.getStack(14));
+        this.dup(14);
     }
     op_dup15() {
         this.decrementGas(3);
-        this.push(this.getStack(15));
+        this.dup(15);
     }
     op_dup16() {
         this.decrementGas(3);
-        this.push(this.getStack(16));
+        this.dup(16);
     }
-    private doSwap(n: number) {
-        const target = this.stack.length - n - 1;
-        if (target < 0) {
-            throw new Error('not enough values on stack');
-        }
-        const latest = this.stack.pop()!;
-        this.stack.push(this.stack[target]);
-        this.stack[target] = latest;
-    }
+
     op_swap1() {
         this.decrementGas(3);
-        this.doSwap(1);
+        this.swap(1);
     }
     op_swap2() {
         this.decrementGas(3);
-        this.doSwap(2);
+        this.swap(2);
     }
     op_swap3() {
         this.decrementGas(3);
-        this.doSwap(3);
+        this.swap(3);
     }
     op_swap4() {
         this.decrementGas(3);
-        this.doSwap(4);
+        this.swap(4);
     }
     op_swap5() {
         this.decrementGas(3);
-        this.doSwap(5);
+        this.swap(5);
     }
     op_swap6() {
         this.decrementGas(3);
-        this.doSwap(6);
+        this.swap(6);
     }
     op_swap7() {
         this.decrementGas(3);
-        this.doSwap(7);
+        this.swap(7);
     }
     op_swap8() {
         this.decrementGas(3);
-        this.doSwap(8);
+        this.swap(8);
     }
     op_swap9() {
         this.decrementGas(3);
-        this.doSwap(9);
+        this.swap(9);
     }
     op_swap10() {
         this.decrementGas(3);
-        this.doSwap(10);
+        this.swap(10);
     }
     op_swap11() {
         this.decrementGas(3);
-        this.doSwap(11);
+        this.swap(11);
     }
     op_swap12() {
         this.decrementGas(3);
-        this.doSwap(12);
+        this.swap(12);
     }
     op_swap13() {
         this.decrementGas(3);
-        this.doSwap(13);
+        this.swap(13);
     }
     op_swap14() {
         this.decrementGas(3);
-        this.doSwap(14);
+        this.swap(14);
     }
     op_swap15() {
         this.decrementGas(3);
-        this.doSwap(15);
+        this.swap(15);
     }
     op_swap16() {
         this.decrementGas(3);
-        this.doSwap(16);
+        this.swap(16);
     }
 
     private getData(): Uint8Array {
@@ -861,31 +1102,39 @@ export class Executor implements IExecutor {
     }
     op_log0() {
         this.decrementGas(3);
-        const log: Log = { address: this.state.address, data: this.getData(), topics: [], }
+        const log: Log = { address: this.state.address, data: this.getData(), topics: [] };
         this.logs.push(log);
         this._onLog?.forEach(fn => fn(log));
     }
     op_log1() {
         this.decrementGas(3);
-        const log: Log = { address: this.state.address, data: this.getData(), topics: [this.pop()], }
+        const log: Log = { address: this.state.address, data: this.getData(), topics: [this.pop()] };
         this.logs.push(log);
         this._onLog?.forEach(fn => fn(log));
     }
     op_log2() {
         this.decrementGas(3);
-        const log: Log = { address: this.state.address, data: this.getData(), topics: [this.pop(), this.pop()], }
+        const log: Log = { address: this.state.address, data: this.getData(), topics: [this.pop(), this.pop()] };
         this.logs.push(log);
         this._onLog?.forEach(fn => fn(log));
     }
     op_log3() {
         this.decrementGas(3);
-        const log: Log = { address: this.state.address, data: this.getData(), topics: [this.pop(), this.pop(), this.pop()], }
+        const log: Log = {
+            address: this.state.address,
+            data: this.getData(),
+            topics: [this.pop(), this.pop(), this.pop()],
+        };
         this.logs.push(log);
         this._onLog?.forEach(fn => fn(log));
     }
     op_log4() {
         this.decrementGas(3);
-        const log: Log = { address: this.state.address, data: this.getData(), topics: [this.pop(), this.pop(), this.pop(), this.pop()], }
+        const log: Log = {
+            address: this.state.address,
+            data: this.getData(),
+            topics: [this.pop(), this.pop(), this.pop(), this.pop()],
+        };
         this.logs.push(log);
         this._onLog?.forEach(fn => fn(log));
     }
@@ -911,8 +1160,7 @@ export class Executor implements IExecutor {
 
         // setup context
         const calldata = this.mem.slice(argsOffset, argsSize);
-        const newState = await this.state
-            .pushCallTo(contract, value, calldata, retSize);
+        const newState = await this.state.pushCallTo(contract, value, calldata, retSize);
 
         // execute
         const executor = new Executor(newState, gas, code);
@@ -923,7 +1171,13 @@ export class Executor implements IExecutor {
         this.setCallResult(result, retOffset, retSize, executor.logs, 'call');
     }
 
-    private setCallResult(result: StopReason, retOffset: number, retSize: number, logs: Log[], type: 'call' | 'delegatecall' | 'callcode' | 'staticcall' | 'create2') {
+    private setCallResult(
+        result: StopReason,
+        retOffset: number,
+        retSize: number,
+        logs: Log[],
+        type: 'call' | 'delegatecall' | 'callcode' | 'staticcall' | 'create2',
+    ) {
         const success = isSuccess(result);
         if (type !== 'create2') {
             this.pushBool(success);
@@ -933,15 +1187,13 @@ export class Executor implements IExecutor {
             this.lastReturndata = new MemReader([]);
         }
 
-
         if (isFailure(result)) {
             this.decrementGas(result.gas);
             return;
         }
 
         // on success, update the current state
-        this.state = result.newState
-            .popCallStack();
+        this.state = result.newState.popCallStack();
 
         this.logs.push(...logs);
 
@@ -966,12 +1218,13 @@ export class Executor implements IExecutor {
     }
     op_return() {
         this.decrementGas(3);
+        const data = this.getData();
         this.stop = {
             type: 'return',
-            data: this.getData(),
+            data,
             gas: this.gasSpent,
             newState: this.state,
-        }
+        };
     }
 
     @asyncOp()
@@ -988,8 +1241,7 @@ export class Executor implements IExecutor {
 
         // setup context
         const calldata = this.mem.slice(argsOffset, argsSize);
-        const newState = this.state
-            .pushDelegatecallTo(contract, calldata, retSize);
+        const newState = this.state.pushDelegatecallTo(contract, calldata, retSize);
 
         // execute
         const executor = new Executor(newState, gas, code);
@@ -1003,7 +1255,7 @@ export class Executor implements IExecutor {
     @asyncOp()
     async op_create2() {
         this.decrementGas(3);
-        const value = U256(this.popAsNum());
+        const value = this.pop();
         const offset = this.popAsNum();
         const size = this.popAsNum();
         const salt = this.pop();
@@ -1018,12 +1270,10 @@ export class Executor implements IExecutor {
         this.push(accountAddress);
     }
 
-    async doCreate2(salt: UInt256, code: Uint8Array, value: UInt256) {
+    async doCreate2(salt: bigint, code: Uint8Array, value: bigint) {
         const accountAddress = this.computeCreate2Address(salt, code);
 
-        const newState = await this.state
-            .pushCallTo(accountAddress, value, code, 0x20);
-
+        const newState = await this.state.pushCallTo(accountAddress, value, code, 0x20);
 
         // compile the deployer code
         const compiledDeployer = compileCode(code, undefined, accountAddress, undefined, undefined);
@@ -1047,27 +1297,27 @@ export class Executor implements IExecutor {
         return accountAddress;
     }
 
-    private computeCreate2Address(salt: UInt256, code: Uint8Array): UInt256 {
+    private computeCreate2Address(salt: bigint, code: Uint8Array): bigint {
         // Bases HEX strings
-        const stringSender = this.state.address.toString(16).padStart(40, "0")
-        const stringSalt = salt.toString(16).padStart(64, "0")
-        const stringCode = Buffer.from(code).toString('hex')
+        const stringSender = this.state.address.toString(16).padStart(40, '0');
+        const stringSalt = salt.toString(16).padStart(64, '0');
+        const stringCode = Buffer.from(code).toString('hex');
 
         // Hash the creation code
-        const bytesCode = parseBuffer(stringCode)
-        const hashedCode = keccak256(bytesCode)
+        const bytesCode = parseBuffer(stringCode);
+        const hashedCode = keccak256(bytesCode);
 
         // Final bytes to hash
-        const hexStringToHash = "ff" + stringSender + stringSalt + hashedCode.toString('hex')
-        const bytesToHash = parseBuffer(hexStringToHash)
+        const hexStringToHash = 'ff' + stringSender + stringSalt + Buffer.from(hashedCode).toString('hex');
+        const bytesToHash = parseBuffer(hexStringToHash);
 
         // Final hash
-        const hash = keccak256(bytesToHash)
+        const hash = keccak256(bytesToHash);
 
         // Final address
-        const address = "0x" + hash.toString('hex').slice(-40)
+        const address = '0x' + Buffer.from(hash).toString('hex').slice(-40);
 
-        return U256(address)
+        return toUint(address);
     }
 
     @asyncOp()
@@ -1084,8 +1334,7 @@ export class Executor implements IExecutor {
 
         // setup context
         const calldata = this.mem.slice(argsOffset, argsSize);
-        const newState = this.state
-            .pushStaticcallTo(contract, calldata, retSize);
+        const newState = this.state.pushStaticcallTo(contract, calldata, retSize);
 
         // execute
         const executor = new Executor(newState, gas, code);
@@ -1101,7 +1350,7 @@ export class Executor implements IExecutor {
             type: 'revert',
             data: this.getData(),
             gas: this.gasSpent,
-        }
+        };
     }
     op_invalid() {
         this.decrementGas(3);
@@ -1114,21 +1363,262 @@ export class Executor implements IExecutor {
 }
 
 const p = Executor.prototype;
-export type OpFn = (((...args: any[]) => void | Promise<void>) & { isAsync?: boolean });
-export const ops: OpFn[] = [p.op_stop, p.op_add, p.op_mul, p.op_sub, p.op_div, p.op_sdiv, p.op_mod, p.op_smod, p.op_addmod, p.op_mulmod, p.op_exp, p.op_signextend, p.op_unused, p.op_unused, p.op_unused, p.op_unused,
-p.op_lt, p.op_gt, p.op_slt, p.op_sgt, p.op_eq, p.op_iszero, p.op_and, p.op_or, p.op_xor, p.op_not, p.op_byte, p.op_shl, p.op_shr, p.op_sar, p.op_unused, p.op_unused,
-p.op_sha3, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused,
-p.op_address, p.op_balance, p.op_origin, p.op_caller, p.op_callvalue, p.op_calldataload, p.op_calldatasize, p.op_calldatacopy, p.op_codesize, p.op_codecopy, p.op_gasprice, p.op_extcodesize, p.op_extcodecopy, p.op_returndatasize, p.op_returndatacopy, p.op_extcodehash,
-p.op_blockhash, p.op_coinbase, p.op_timestamp, p.op_number, p.op_difficulty, p.op_gaslimit, p.op_chainid, p.op_selfbalance, p.op_basefee, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused,
-p.op_pop, p.op_mload, p.op_mstore, p.op_mstore8, p.op_sload, p.op_sstore, p.op_jump, p.op_jumpi, p.op_pc, p.op_msize, p.op_gas, p.op_jumpdest, p.op_unused, p.op_unused, p.op_unused, p.op_push0,
-p.op_push1, p.op_push2, p.op_push3, p.op_push4, p.op_push5, p.op_push6, p.op_push7, p.op_push8, p.op_push9, p.op_push10, p.op_push11, p.op_push12, p.op_push13, p.op_push14, p.op_push15, p.op_push16,
-p.op_push17, p.op_push18, p.op_push19, p.op_push20, p.op_push21, p.op_push22, p.op_push23, p.op_push24, p.op_push25, p.op_push26, p.op_push27, p.op_push28, p.op_push29, p.op_push30, p.op_push31, p.op_push32,
-p.op_dup1, p.op_dup2, p.op_dup3, p.op_dup4, p.op_dup5, p.op_dup6, p.op_dup7, p.op_dup8, p.op_dup9, p.op_dup10, p.op_dup11, p.op_dup12, p.op_dup13, p.op_dup14, p.op_dup15, p.op_dup16,
-p.op_swap1, p.op_swap2, p.op_swap3, p.op_swap4, p.op_swap5, p.op_swap6, p.op_swap7, p.op_swap8, p.op_swap9, p.op_swap10, p.op_swap11, p.op_swap12, p.op_swap13, p.op_swap14, p.op_swap15, p.op_swap16,
-p.op_log0, p.op_log1, p.op_log2, p.op_log3, p.op_log4, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused,
-p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused,
-p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused,
-p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused,
-p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_unused,
-p.op_create, p.op_call, p.op_callcode, p.op_return, p.op_delegatecall, p.op_create2, p.op_unused, p.op_unused, p.op_unused, p.op_unused, p.op_staticcall, p.op_unused, p.op_unused, p.op_revert, p.op_invalid, p.op_selfdestruct
+export type OpFn = ((...args: any[]) => void | Promise<void>) & { isAsync?: boolean };
+export const ops: OpFn[] = [
+    p.op_stop,
+    p.op_add,
+    p.op_mul,
+    p.op_sub,
+    p.op_div,
+    p.op_sdiv,
+    p.op_mod,
+    p.op_smod,
+    p.op_addmod,
+    p.op_mulmod,
+    p.op_exp,
+    p.op_signextend,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_lt,
+    p.op_gt,
+    p.op_slt,
+    p.op_sgt,
+    p.op_eq,
+    p.op_iszero,
+    p.op_and,
+    p.op_or,
+    p.op_xor,
+    p.op_not,
+    p.op_byte,
+    p.op_shl,
+    p.op_shr,
+    p.op_sar,
+    p.op_unused,
+    p.op_unused,
+    p.op_sha3,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_address,
+    p.op_balance,
+    p.op_origin,
+    p.op_caller,
+    p.op_callvalue,
+    p.op_calldataload,
+    p.op_calldatasize,
+    p.op_calldatacopy,
+    p.op_codesize,
+    p.op_codecopy,
+    p.op_gasprice,
+    p.op_extcodesize,
+    p.op_extcodecopy,
+    p.op_returndatasize,
+    p.op_returndatacopy,
+    p.op_extcodehash,
+    p.op_blockhash,
+    p.op_coinbase,
+    p.op_timestamp,
+    p.op_number,
+    p.op_difficulty,
+    p.op_gaslimit,
+    p.op_chainid,
+    p.op_selfbalance,
+    p.op_basefee,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_pop,
+    p.op_mload,
+    p.op_mstore,
+    p.op_mstore8,
+    p.op_sload,
+    p.op_sstore,
+    p.op_jump,
+    p.op_jumpi,
+    p.op_pc,
+    p.op_msize,
+    p.op_gas,
+    p.op_jumpdest,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_push0,
+    p.op_push1,
+    p.op_push2,
+    p.op_push3,
+    p.op_push4,
+    p.op_push5,
+    p.op_push6,
+    p.op_push7,
+    p.op_push8,
+    p.op_push9,
+    p.op_push10,
+    p.op_push11,
+    p.op_push12,
+    p.op_push13,
+    p.op_push14,
+    p.op_push15,
+    p.op_push16,
+    p.op_push17,
+    p.op_push18,
+    p.op_push19,
+    p.op_push20,
+    p.op_push21,
+    p.op_push22,
+    p.op_push23,
+    p.op_push24,
+    p.op_push25,
+    p.op_push26,
+    p.op_push27,
+    p.op_push28,
+    p.op_push29,
+    p.op_push30,
+    p.op_push31,
+    p.op_push32,
+    p.op_dup1,
+    p.op_dup2,
+    p.op_dup3,
+    p.op_dup4,
+    p.op_dup5,
+    p.op_dup6,
+    p.op_dup7,
+    p.op_dup8,
+    p.op_dup9,
+    p.op_dup10,
+    p.op_dup11,
+    p.op_dup12,
+    p.op_dup13,
+    p.op_dup14,
+    p.op_dup15,
+    p.op_dup16,
+    p.op_swap1,
+    p.op_swap2,
+    p.op_swap3,
+    p.op_swap4,
+    p.op_swap5,
+    p.op_swap6,
+    p.op_swap7,
+    p.op_swap8,
+    p.op_swap9,
+    p.op_swap10,
+    p.op_swap11,
+    p.op_swap12,
+    p.op_swap13,
+    p.op_swap14,
+    p.op_swap15,
+    p.op_swap16,
+    p.op_log0,
+    p.op_log1,
+    p.op_log2,
+    p.op_log3,
+    p.op_log4,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_create,
+    p.op_call,
+    p.op_callcode,
+    p.op_return,
+    p.op_delegatecall,
+    p.op_create2,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_unused,
+    p.op_staticcall,
+    p.op_unused,
+    p.op_unused,
+    p.op_revert,
+    p.op_invalid,
+    p.op_selfdestruct,
 ];

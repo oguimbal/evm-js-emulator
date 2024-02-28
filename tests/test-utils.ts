@@ -1,11 +1,13 @@
 import { NewTxData, IExecutor, isSuccess, SessionOpts, ISession, HexString } from '../src/interfaces';
-import { U256, UInt256 } from '../src/uint256';
 import { Buffer } from 'buffer';
-import { dumpU256, MAX_UINT, parseBuffer, to0xAddress, toNumberSafe, toUint } from '../src/utils';
+import { dumpU256, MAX_UINT, parseBuffer, to0xAddress, toNumberSafe, toUint, UIntSource } from '../src/utils';
 import { KNOWN_CONTRACT, USDC } from './known-contracts';
 import { utils } from 'ethers';
 import { Session } from '../src/session';
 import { setStorageInstance } from '../src/blockchain-state';
+import { toBytes32 } from '../src/bytes';
+import { expect } from 'chai';
+import { toTwos } from '../src/arithmetic';
 export * from './known-contracts';
 
 
@@ -22,15 +24,15 @@ export const TEST_SESSION_OPTS: SessionOpts = {
     contractsNames: Object.fromEntries(KNOWN_CONTRACT.map(c => [c.address, c.name])),
 }
 
-export function newTxData(contract: UInt256, data?: Partial<NewTxData>): NewTxData {
+export function newTxData(contract: bigint, data?: Partial<NewTxData>): NewTxData {
     return {
         calldata: new Uint8Array(0),
-        callvalue: U256(0),
+        callvalue: 0n,
         gasLimit: MAX_UINT,
-        gasPrice: U256(0xffff),
+        gasPrice: BigInt(0xffff),
         retdatasize: 0,
         static: false,
-        origin: U256(0x1234),
+        origin: BigInt(0x1234),
         ...data,
         contract,
     };
@@ -39,17 +41,17 @@ export function newTxData(contract: UInt256, data?: Partial<NewTxData>): NewTxDa
 export function newDeployTxData(data?: Partial<NewTxData>): Omit<NewTxData, 'contract'> {
     return {
         calldata: new Uint8Array(0),
-        callvalue: U256(0),
-        gasLimit: U256(0xfffffffffff),
-        gasPrice: U256(0xffff),
+        callvalue: 0n,
+        gasLimit: BigInt(0xfffffffffff),
+        gasPrice: BigInt(0xffff),
         retdatasize: 0,
         static: false,
-        origin: U256(0x1234),
+        origin: BigInt(0x1234),
         ...data,
     };
 }
 
-export async function executeBytecode(ops: string | number[], opts?: Partial<NewTxData>, mintSenderBalance?: UInt256) {
+export async function executeBytecode(ops: string | number[], opts?: Partial<NewTxData>, mintSenderBalance?: bigint) {
     const session = new Session(TEST_SESSION_OPTS);
     const contract = session.deployRaw(typeof ops === 'string' ? parseBuffer(ops) : Buffer.from(ops));
     const txData = newTxData(contract, opts);
@@ -219,11 +221,11 @@ export function toUintBuffer(txt: string) {
     if (txt.startsWith('0x')) {
         txt = txt.substring(2);
     }
-    return toUint(txt).toByteArray()
+    return toBytes32(toUint(txt))
 }
 
 
-export async function balanceOfUsdc(session: ISession, address: string | HexString | UInt256, watch?: boolean) {
+export async function balanceOfUsdc(session: ISession, address: string | HexString | bigint, watch?: boolean) {
     if (typeof address !== 'string') {
         address = dumpU256(address).padStart(40, '0');
     }
@@ -247,16 +249,16 @@ export async function balanceOfUsdc(session: ISession, address: string | HexStri
     return toUint(result!);
 }
 
-export async function balanceOf(session: ISession, address: UInt256): Promise<UInt256> {
+export async function balanceOf(session: ISession, address: bigint): Promise<bigint> {
     const ret = await session.state.getStorageOf(address).getBalance();
     return ret;
 }
 
-export function balanceOfNum(session: ISession, address: UInt256): Promise<number> {
+export function balanceOfNum(session: ISession, address: bigint): Promise<number> {
     return balanceOf(session, address).then(n => toNumberSafe(n));
 }
 
-function addressToStr(address: string | HexString | UInt256): string {
+function addressToStr(address: string | HexString | bigint): string {
     if (typeof address !== 'string') {
         address = dumpU256(address).padStart(40, '0');
     }
@@ -268,7 +270,7 @@ function addressToStr(address: string | HexString | UInt256): string {
 
 export const HAS_USDC_RAW = 'd6153f5af5679a75cc85d8974463545181f48772'
 export const HAS_USDC = toUint('0x' + HAS_USDC_RAW);
-export async function transferUsdcTo(session: ISession, address: string | HexString | UInt256, qty: UInt256, watch?: boolean) {
+export async function transferUsdcTo(session: ISession, address: string | HexString | bigint, qty: bigint, watch?: boolean) {
     address = addressToStr(address);
     const exec = await session.prepareCall(newTxData(toUint(USDC), {
         // 5f5e100
@@ -287,8 +289,14 @@ export async function transferUsdcTo(session: ISession, address: string | HexStr
     }
 }
 
-export async function transferEthTo(session: ISession, address: string | HexString | UInt256, qty: UInt256) {
+export async function transferEthTo(session: ISession, address: string | HexString | bigint, qty: bigint) {
     address = toUint(address);
     const storage = session.state.getStorageOf(address);
     setStorageInstance(session.state, address, storage.incrementBalance(qty));
+}
+
+
+export function expectSignedEq(twos: UIntSource, expected: bigint) {
+    // test freezes because it doesnt know how to serialize bigint in case of failure
+    expect(toUint(twos).toString()).to.eq(toTwos(expected).toString());
 }

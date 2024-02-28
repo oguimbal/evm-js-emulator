@@ -1,17 +1,18 @@
 import { Buffer } from 'buffer';
-import { U256, UInt256 } from './uint256';
-import seedRandom from 'seedrandom';
 import { HexString } from './interfaces';
 import keccak256 from 'keccak256';
-
+import { bytesToBigInt, bytesToHex } from './bytes';
+import seedRandom from 'seedrandom';
+import { MAX_NUM } from './arithmetic';
 
 export const MAX_UINT = toUint('0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF');
 
-export function toUint(buf: number | Uint8Array | HexString | string | UInt256): UInt256 {
+export type UIntSource = number | Uint8Array | HexString | string | bigint | number[];
+export function toUint(buf: UIntSource): bigint {
     if (typeof buf === 'number') {
-        return U256(buf);
+        return BigInt(buf);
     }
-    if (buf instanceof UInt256) {
+    if (typeof buf === 'bigint') {
         return buf;
     }
     if (typeof buf === 'string') {
@@ -20,76 +21,65 @@ export function toUint(buf: number | Uint8Array | HexString | string | UInt256):
         }
         buf = parseBuffer(buf);
     }
-    const ab = new ArrayBuffer(32);
-    const view = new Uint8Array(ab);
-    for (let i = 0; i < buf.length; ++i) {
-        view[i] = buf[buf.length - i - 1];
+    if (Array.isArray(buf)) {
+        buf = new Uint8Array(buf);
     }
-    return U256(ab);
+    // const ab = new ArrayBuffer(32);
+    // const view = new Uint8Array(ab);
+    // for (let i = 0; i < buf.length; ++i) {
+    //     view[i] = buf[buf.length - i - 1];
+    // }
+    // return U256(ab);
+    return bytesToBigInt(buf);
 }
 
-export function to32ByteBuffer(buffer: Uint8Array | Buffer){
-    const ab = new Uint8Array(32);
-    ab.fill(0)
-    for(let i = 0; i < buffer.length; i++){
-        ab.fill(buffer[i]!, i, i+1)
+
+
+const address_mask = toUint('000000000000000000000000FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF');
+export function to0xAddress(address: HexString | bigint): HexString {
+    if (typeof address === 'string') {
+        return address;
     }
-    return ab
+    const bn = address & address_mask;
+    const ret = (address & address_mask).toString(16);
+    return `0x${ret.padStart(40, '0')}`;
 }
 
-export function deriveU256FromBuffer(buffer: Uint8Array | Buffer, zerosUntil = 0): UInt256 {
+export function dumpU256(num: bigint): string {
+    return num.toString(16);
+}
+
+export function generateAddress(seed: string | Buffer | Uint8Array): bigint {
+    if (typeof seed === 'string') {
+        seed = parseBuffer(seed);
+    }
+    if (seed instanceof Buffer) {
+        seed = seed.subarray();
+    }
+    return deriveU256FromBuffer(seed, 32 - 20);
+}
+
+export function deriveU256FromBuffer(buffer: Uint8Array | Buffer, zerosUntil = 0): bigint {
     const prng = seedRandom(Buffer.from(buffer).toString('hex'));
     const ab = new ArrayBuffer(32);
     const buf = new Uint8Array(ab);
     for (let i = zerosUntil; i < 20; i++) {
         buf[i] = Math.floor(prng() * 256);
     }
-    return U256(ab);
+    return toUint(buf);
 }
 
-const address_mask = toUint('000000000000000000000000FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF');
-export function toAddress(_address: HexString | UInt256) {
-    const address = typeof _address === 'string' ? from0x(_address) : _address;
-    return address.and(address_mask);
-}
-
-export function to0xAddress(address: HexString | UInt256): HexString {
-    const ret = toAddress(address).toString(16);
-    return `0x${ret.padStart(40, '0')}`;
-}
-
-export function from0x(address: HexString): UInt256 {
-    const hex = address.substring(2);
-    return toUint(parseBuffer(hex));
-}
-
-export function dumpU256(num: UInt256): string {
-    return num.toString(16);
-}
-
-export function generateAddress(seed: string | Buffer | Uint8Array) {
-    if (typeof seed === 'string') {
-        seed = parseBuffer(seed);
-    }
-    if (seed instanceof Buffer) {
-        seed = seed.subarray()
-    }
-    return deriveU256FromBuffer(seed, 32 - 20);
-}
-
-export const MAX_NUM = U256(Number.MAX_SAFE_INTEGER);
-export function toNumberSafe(num: UInt256): number {
-    if (num.gt(MAX_NUM)) {
+export function toNumberSafe(num: bigint): number {
+    if (num > MAX_NUM) {
         throw new Error('not expecting such a high number for this operation');
     }
     return parseInt(num.toString());
 }
 
-export function shaOf(buffer: Uint8Array): UInt256 {
+export function shaOf(buffer: Uint8Array): bigint {
     const hashed = keccak256(Buffer.from(buffer));
     return toUint(hashed.subarray());
 }
-
 
 declare var __non_webpack_require__: any;
 declare var require: any;
@@ -112,7 +102,7 @@ export function getNodejsLibs(cacheDir?: string) {
             if (!fs.existsSync(dir)) {
                 fs.mkdirSync(dir);
             }
-        }
+        };
         const globalCache = cacheDir
             ? path.resolve(process.cwd(), cacheDir)
             : path.resolve(process.cwd(), '.evm-js-cache');
@@ -123,13 +113,15 @@ export function getNodejsLibs(cacheDir?: string) {
                 ensureDir(path.resolve(file, '..'));
                 fs.writeFileSync(file, content);
                 return file;
-            }, readCache: (_file: string, expire?: number) => {
+            },
+            readCache: (_file: string, expire?: number) => {
                 const file = path.resolve(globalCache, _file);
                 if (!fs.existsSync(file)) {
                     return null;
                 }
                 return fs.readFileSync(file, 'utf-8');
-            }, expireDir: (_dir: string, expire: number) => {
+            },
+            expireDir: (_dir: string, expire: number) => {
                 const cachePath = path.resolve(globalCache, _dir);
                 if (!fs.existsSync(cachePath)) {
                     return;
@@ -140,7 +132,7 @@ export function getNodejsLibs(cacheDir?: string) {
                     fs.rmSync(cachePath, { recursive: true, force: true });
                     fs.mkdirSync(cachePath);
                 }
-            }
+            },
         };
     }
     return {};

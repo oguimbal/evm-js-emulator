@@ -1,24 +1,24 @@
 import 'mocha';
 import { assert, expect } from 'chai';
-import { deriveU256FromBuffer, dumpU256, from0x, to0xAddress, toUint } from '../src/utils';
+import { deriveU256FromBuffer, dumpU256, to0xAddress, toUint } from '../src/utils';
 import { Buffer } from 'buffer';
-import { U256, UInt256 } from '../src/uint256';
 import { MemReader } from '../src/mem-reader';
 import { incrementingArray, USDC } from './test-utils';
+import { toBytes32 } from '../src/bytes';
 
 describe('Utils', () => {
     it('deriveU256FromBuffer()', () => {
         const address = deriveU256FromBuffer(Buffer.from('random thing'), 32 - 20);
-        expect(to0xAddress(address)).to.equal('0x51a3e535cb8ce1df000000000000000000000000');
+        expect(to0xAddress(address)).to.equal('0xdfe18ccb35e5a351000000000000000000000000');
     })
 
     it('to0xAddress()', () => {
-        expect(to0xAddress(U256(1))).to.equal('0x0000000000000000000000000000000000000001');
-        expect(to0xAddress(U256(0x12345AF))).to.equal('0x00000000000000000000000000000000012345af');
+        expect(to0xAddress(BigInt(1))).to.equal('0x0000000000000000000000000000000000000001');
+        expect(to0xAddress(BigInt(0x12345AF))).to.equal('0x00000000000000000000000000000000012345af');
     });
 
     it ('from0x', () => {
-        const asInt = from0x(USDC);
+        const asInt = toUint(USDC);
         expect(to0xAddress(asInt)).to.equal(USDC.toLowerCase());
     })
 
@@ -30,7 +30,7 @@ describe('Utils', () => {
             0x45,
             0xaf,
         ]));
-        assert.isTrue(num.eq(0x12345af));
+        assert.equal(num, BigInt(0x12345af));
     });
 
     it('dumpU256()', () => {
@@ -45,7 +45,7 @@ describe('Utils', () => {
     })
 
     it('u256 the expected layout', () => {
-        const arr = U256(0x12345AF).toByteArray();
+        const arr = toBytes32(0x12345AF);
         expect(arr.length).to.equal(32);
         const exp = Buffer.from([
             ...Array(32 - 4).fill(0),

@@ -1,7 +1,6 @@
 import fetch from 'node-fetch';
 import { HexString, IRpc } from './interfaces';
-import { U256, UInt256 } from './uint256';
-import { dumpU256, getNodejsLibs, parseBuffer, to32ByteBuffer, toUint } from './utils';
+import { dumpU256, getNodejsLibs, parseBuffer, to0xAddress, toUint } from './utils';
 
 let id = 0;
 export class RPC implements IRpc {
@@ -120,12 +119,15 @@ export class RPC implements IRpc {
         return await this.fetchBuffer(`get contract ${contract}`, 'eth_getCode', [contract]);
     }
 
-    async getStorageAt(address: HexString, key: HexString): Promise<UInt256> {
-        const buffer = await this.fetchBuffer(`get storage at ${key}`, 'eth_getStorageAt', [address, key]);
+    async getStorageAt(address: HexString, key: bigint): Promise<bigint> {
+        const buffer = await this.fetchBuffer(`get storage at ${key}`, 'eth_getStorageAt', [
+            address,
+            '0x' + dumpU256(key),
+        ]);
         return toUint(buffer);
     }
 
-    async getBalance(key: HexString): Promise<UInt256> {
+    async getBalance(key: HexString): Promise<bigint> {
         const buffer = await this.fetchBuffer(`get balance of ${key}`, 'eth_getBalance', [key]);
         return toUint(buffer);
     }

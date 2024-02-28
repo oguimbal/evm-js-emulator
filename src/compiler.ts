@@ -3,8 +3,7 @@ import keccak256 from 'keccak256';
 import { Executor, ops } from './executor';
 import { CompiledCode, HexString } from './interfaces';
 import { MemReader } from './mem-reader';
-import { UInt256 } from './uint256';
-import { generateAddress, getNodejsLibs, to0xAddress, toUint } from './utils';
+import { generateAddress, getNodejsLibs, to0xAddress } from './utils';
 
 const p = Executor.prototype;
 
@@ -16,30 +15,27 @@ type CP = {
 };
 type Ret = 'always' | 'maybe' | 'no';
 
-type Nm = string | Def | null | undefined
-type Def = { name: string; abi?: utils.Interface};
+type Nm = string | Def | null | undefined;
+type Def = { name: string; abi?: utils.Interface };
 
-export function compileCode(contractCode: Uint8Array
-    , _def: Nm | ((address: HexString) => Nm)
-    , forceAddress?: UInt256
-    , knownSequences?: KnownSequence[]
-    , cacheDir?: string): CompiledCode {
-
+export function compileCode(
+    contractCode: Uint8Array,
+    _def: Nm | ((address: HexString) => Nm),
+    forceAddress?: bigint,
+    knownSequences?: KnownSequence[],
+    cacheDir?: string,
+): CompiledCode {
     // compute all labels
     let codeParts = computeCodeparts(contractCode);
 
     // compute known sequences
-    const { knownDetector, additionalCode } = detectKnownSequences(knownSequences)
+    const { knownDetector, additionalCode } = detectKnownSequences(knownSequences);
     codeParts = codeParts.map(knownDetector);
 
     // compute final code
     const address = forceAddress ?? generateAddress(contractCode);
-    const defGot = typeof _def === 'function'
-        ? _def(to0xAddress(address))
-        : _def;
-    const def: Def | null | undefined = typeof defGot === 'string'
-        ? { name: defGot }
-        : defGot;
+    const defGot = typeof _def === 'function' ? _def(to0xAddress(address)) : _def;
+    const def: Def | null | undefined = typeof defGot === 'string' ? { name: defGot } : defGot;
     const contractName = def?.name;
     const hasAsync = codeParts.some(c => c.isAsync);
 
@@ -51,19 +47,33 @@ export function compileCode(contractCode: Uint8Array
 function ${contractName ?? 'entry'}(e) {
 let mem, stack;
 
-${codeParts.map((c, i) => `const ${label}${c.address.toString(16)} = ${c.isAsync ? 'async' : ''} () =>  {
+${codeParts
+    .map(
+        (c, i) => `const ${label}${c.address.toString(16)} = ${c.isAsync ? 'async' : ''} () =>  {
     ${c.codeLines.join('\n    ')}
-${i !== codeParts.length - 1 && c.mayReturn !== 'always' ? `    return ${label}${codeParts[i + 1].address.toString(16)};` : ''}
-}`).join('\n\n')}
+${
+    i !== codeParts.length - 1 && c.mayReturn !== 'always'
+        ? `    return ${label}${codeParts[i + 1].address.toString(16)};`
+        : ''
+}
+}`,
+    )
+    .join('\n\n')}
 
-${additionalCode().map((c) => `const ${c.name} = ${c.code.isAsync ? 'async' : ''} () =>  {
+${additionalCode()
+    .map(
+        c => `const ${c.name} = ${c.code.isAsync ? 'async' : ''} () =>  {
 try {
     e.startKnownSequence('${c.name}');
     ${c.code.codeLines.join('\n    ')}
 } finally { e.endKnownSequence(); }
-}`).join('\n\n')}
+}`,
+    )
+    .join('\n\n')}
 
-const labels = new Map([${codeParts.map(c => `[0x${c.address.toString(16)}, ${label}${c.address.toString(16)}]`).join(',')}])
+const labels = new Map([${codeParts
+        .map(c => `[0x${c.address.toString(16)}, ${label}${c.address.toString(16)}]`)
+        .join(',')}])
 function getLabel(address) {
     const label = labels.get(address);
     if (!label) {
@@ -87,13 +97,15 @@ return ${hasAsync ? 'async' : ''} () =>  {
     if (writeCache) {
         // when running NodeJS, lets write this in a file, in order to run it
 
-
         // create an unique file name based on its hash, or starting by "µ" (so unnamed contracts appear last in alphabetical order)
         const hash = (contractName ?? 'µ') + '_' + keccak256(Buffer.from(contractCode)).toString('hex');
 
         // write code
-        const target = writeCache(`contracts/${hash}.js`, `${code}
-module.exports = ${contractName ?? 'entry'}`);
+        const target = writeCache(
+            `contracts/${hash}.js`,
+            `${code}
+module.exports = ${contractName ?? 'entry'}`,
+        );
 
         // init
         bind = require(target);
@@ -108,8 +120,6 @@ ${contractName ?? 'entry'} // return the program entry`);
     bind.contractAbi = def?.abi;
     return bind;
 }
-
-
 
 function computeCodeparts(contractCode: Uint8Array) {
     let codeParts: CP[] = [];
@@ -147,7 +157,8 @@ function computeCodeparts(contractCode: Uint8Array) {
                     '    const to = e.popAsNum();',
                     `    e.${fn.name}();`,
                     '    return getLabel(to);',
-                    '}');
+                    '}',
+                );
                 break;
             case p.op_jumpi:
                 // jumpi has a special implementation
@@ -163,7 +174,8 @@ function computeCodeparts(contractCode: Uint8Array) {
                     '    if (condition) {',
                     '         return getLabel(to);',
                     '    }',
-                    '}');
+                    '}',
+                );
                 break;
             case p.op_pc:
                 // PC has a special implementation
@@ -219,7 +231,11 @@ function computeCodeparts(contractCode: Uint8Array) {
                 const nBytes = parseInt(/(\d+)$/.exec(fn.name)![1]);
                 const toPush = contractCode.slice(i + 1, i + 1 + nBytes);
                 i += nBytes;
-                current.push(`e.${fn.name}([${[...toPush].map(x => '0x' + x.toString(16)).join(', ')}]) // PUSH${nBytes} 0x${Buffer.from(toPush).toString('hex')}`);
+                current.push(
+                    `e.${fn.name}([${[...toPush]
+                        .map(x => '0x' + x.toString(16))
+                        .join(', ')}]) // PUSH${nBytes} 0x${Buffer.from(toPush).toString('hex')}`,
+                );
                 break;
             default:
                 // all other ops, that wont consume data
@@ -245,12 +261,15 @@ interface KnownCP {
     code: CP;
 }
 
-function detectKnownSequences(_sequences: KnownSequence[] | undefined): { knownDetector: (cp: CP) => CP, additionalCode: () => KnownCP[]; } {
+function detectKnownSequences(_sequences: KnownSequence[] | undefined): {
+    knownDetector: (cp: CP) => CP;
+    additionalCode: () => KnownCP[];
+} {
     if (!_sequences?.length) {
         return {
             knownDetector: x => x,
             additionalCode: () => [],
-        }
+        };
     }
     const sequences = _sequences.map<KnownCP>(n => {
         const code = computeCodeparts(n.code);
@@ -269,7 +288,6 @@ function detectKnownSequences(_sequences: KnownSequence[] | undefined): { knownD
         knownDetector: cp => {
             let codeLines = cp.codeLines;
             for (const seq of sequences) {
-
                 if (seq.code.codeLines.length >= codeLines.length) {
                     // not enough code lines in the given code to match this known sequence
                     continue;
@@ -278,7 +296,9 @@ function detectKnownSequences(_sequences: KnownSequence[] | undefined): { knownD
 
                 // find an index at which this sequence is to be found
                 while (true) {
-                    let i = codeLines.findIndex((_, i) => seqSig === codeLines.slice(i, i + seq.code.codeLines.length).join('|'));
+                    let i = codeLines.findIndex(
+                        (_, i) => seqSig === codeLines.slice(i, i + seq.code.codeLines.length).join('|'),
+                    );
                     if (i < 0) {
                         break;
                     }
@@ -299,8 +319,8 @@ function detectKnownSequences(_sequences: KnownSequence[] | undefined): { knownD
                                 '   if (seq) {',
                                 `        return seq;`,
                                 '   }',
-                                '}'
-                            ]
+                                '}',
+                            ];
                             break;
                     }
                     codeLines = [
@@ -313,10 +333,10 @@ function detectKnownSequences(_sequences: KnownSequence[] | undefined): { knownD
             return cp.codeLines === codeLines
                 ? cp
                 : {
-                    ...cp,
-                    codeLines,
-                };
+                      ...cp,
+                      codeLines,
+                  };
         },
         additionalCode: () => [...usedSequences],
-    }
+    };
 }

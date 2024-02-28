@@ -1,76 +1,83 @@
 import { HexString, IRpc, IStorage } from './interfaces';
-import { U256, UInt256 } from './uint256';
 import { dumpU256 } from './utils';
 import { List, Map as ImMap } from 'immutable';
 
 export class MemStorage implements IStorage {
-    constructor(private balance: UInt256, private storage = ImMap<string, UInt256>()) {
+    constructor(private balance: bigint, private storage = ImMap<bigint, bigint>()) {
+        if (balance < 0) {
+            throw new Error('Balance cannot be negative');
+        }
     }
-    getBalance(): UInt256 | Promise<UInt256> {
-        return this.balance.copy();
+    getBalance(): bigint | Promise<bigint> {
+        return this.balance;
     }
-    decrementBalance(value: UInt256): IStorage {
-        return new MemStorage(this.balance.sub(value))
+    decrementBalance(value: bigint): IStorage {
+        return new MemStorage(this.balance - value);
     }
-    incrementBalance(value: UInt256): IStorage {
-        return new MemStorage(this.balance.add(value))
+    incrementBalance(value: bigint): IStorage {
+        return new MemStorage(this.balance + value);
     }
-    get(location: UInt256): Promise<UInt256> | UInt256 {
-        return this.storage.get(location.toString()) ?? U256(0);
+    get(location: bigint): Promise<bigint> | bigint {
+        return this.storage.get(location) ?? 0n;
     }
-    set(location: UInt256, value: UInt256): IStorage {
-        return new MemStorage(this.balance, this.storage.set(location.toString(), value));
+    set(location: bigint, value: bigint): IStorage {
+        return new MemStorage(this.balance, this.storage.set(location, value));
     }
 }
 
 export class RpcStorage implements IStorage {
-    constructor(private address: HexString,
+    constructor(
+        private address: HexString,
         private rpc: IRpc,
-        private balance: UInt256 | null = null,
-        private adds: List<UInt256> = List(),
-        private storage = ImMap<string, UInt256>()) { }
+        private balance: bigint | null = null,
+        private adds: List<bigint> = List(),
+        private storage = ImMap<bigint, bigint>(),
+    ) {}
 
-    async get(location: UInt256): Promise<UInt256> {
-        const key = this.key(location);
-        let cached = this.storage.get(key);
+    async get(location: bigint): Promise<bigint> {
+        let cached = this.storage.get(location);
         if (cached) {
             return cached;
         }
-        cached = await this.rpc.getStorageAt(this.address, key);
-        cached ??= U256(0);
-        this.storage.set(key, cached);
+        cached = await this.rpc.getStorageAt(this.address, location);
+        cached ??= 0n;
+        this.storage.set(location, cached);
         return cached;
     }
 
-    private key(location: UInt256): HexString {
+    private key(location: bigint): HexString {
         return `0x${dumpU256(location)}`;
     }
 
-    set(location: UInt256, value: UInt256): IStorage {
-        return new RpcStorage(this.address, this.rpc, this.balance, this.adds, this.storage.set(this.key(location), value));
+    set(location: bigint, value: bigint): IStorage {
+        return new RpcStorage(this.address, this.rpc, this.balance, this.adds, this.storage.set(location, value));
     }
 
-    async getBalance(): Promise<UInt256> {
+    async getBalance(): Promise<bigint> {
         if (this.balance) {
             return this.balance;
         }
-        this.balance = await this.rpc.getBalance(this.address) ?? U256(0);
+        this.balance = (await this.rpc.getBalance(this.address)) ?? 0n;
         for (const a of this.adds) {
-            this.balance = this.balance.add(a);
+            this.balance += a;
         }
         this.adds = List();
         return this.balance;
     }
 
-    decrementBalance(value: UInt256): IStorage {
-        if (!this.balance) {
+    decrementBalance(value: bigint): IStorage {
+        if (typeof this.balance !== 'bigint') {
             throw new Error('Should have checked balance first');
         }
-        return new RpcStorage(this.address, this.rpc, this.balance.sub(value), this.adds, this.storage);
+        const nb = this.balance - value;
+        if (nb < 0) {
+            throw new Error('Balance cannot be negative');
+        }
+        return new RpcStorage(this.address, this.rpc, nb, this.adds, this.storage);
     }
-    incrementBalance(value: UInt256): IStorage {
+    incrementBalance(value: bigint): IStorage {
         if (this.balance) {
-            return new RpcStorage(this.address, this.rpc, this.balance.add(value), this.adds, this.storage);
+            return new RpcStorage(this.address, this.rpc, this.balance + value, this.adds, this.storage);
         }
         return new RpcStorage(this.address, this.rpc, this.balance, this.adds.push(value), this.storage);
     }

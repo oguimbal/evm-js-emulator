@@ -1,6 +1,5 @@
-import { U256, UInt256 } from './uint256';
-import { Buffer } from 'buffer';
 import { IMemReader } from './interfaces';
+import { toUint } from './utils';
 
 export class MemReader<T extends number[] | Uint8Array = number[] | Uint8Array> implements IMemReader {
 
@@ -10,14 +9,8 @@ export class MemReader<T extends number[] | Uint8Array = number[] | Uint8Array> 
         return this.mem.length;
     }
 
-    get(offset: number): UInt256 {
-        const ab = new ArrayBuffer(32);
-        const view = new Uint8Array(ab);
-        const max = Math.max(32, this.mem.length - offset - 32);
-        for (let i = 0; i < max; i++) {
-            view[31 - i] = this.mem[offset + i] ?? 0;
-        }
-        return U256(ab);
+    get(offset: number): bigint {
+        return toUint(this.mem.slice(offset, offset + 32));
     }
     getByte(offset: number): number {
         return this.mem[offset] ?? 0;

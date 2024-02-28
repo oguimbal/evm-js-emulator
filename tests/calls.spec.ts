@@ -2,7 +2,6 @@ import 'mocha';
 import { assert, expect } from 'chai';
 import { Session } from '../src/session';
 import { balanceOf, balanceOfNum, balanceOfUsdc, executeBytecode, execWatchInstructions, HAS_USDC, HAS_USDC_RAW, newDeployTxData, newTxData, TEST_SESSION_OPTS, transferEthTo, transferUsdcTo } from './test-utils';
-import { U256 } from '../src/uint256';
 import { DOUBLE_SWAP, DUMMY, REENTRANT } from './bytecodes';
 import { dumpU256, generateAddress, parseBuffer, toNumberSafe, toUint } from '../src/utils';
 import { USDC } from './known-contracts';
@@ -15,11 +14,11 @@ describe('Calls', () => {
     });
 
     it.skip('check create2 with a Polygon Nested WalletFactory', async () => {
-        const contract = U256("0xdd64da5ce84bc6f2c130ed2712be9452b5c45839")
+        const contract = BigInt("0xdd64da5ce84bc6f2c130ed2712be9452b5c45839")
 
         const exec = await session.prepareCall(newTxData(contract, {
             calldata: parseBuffer("0xcebc2af4045393280000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000044bf94338e0000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"),
-            caller: U256("0x8b09ab0612d4e1d44cf0c1641b5d0be43a3aec9f")
+            caller: BigInt("0x8b09ab0612d4e1d44cf0c1641b5d0be43a3aec9f")
         }));
         const buffer = await execWatchInstructions(exec);
         const result = [...buffer ?? []]
@@ -46,7 +45,7 @@ describe('Calls', () => {
 
     it('extcodehash on account address', async () => {
         const { result } = await executeBytecode('738b09ab0612d4e1d44cf0c1641b5d0be43a3aec9f3f60005260206000f3')
-        expect(toUint(new Uint8Array(result))).to.deep.eq(U256(0))
+        expect(toUint(new Uint8Array(result))).to.deep.eq(0n)
     })
 
     it('can call a dummy contract', async () => {
@@ -63,14 +62,14 @@ describe('Calls', () => {
         expect(exec.popAsNum()).to.equal(1, 'expecting call success');
 
         // check that the target contract has 0x42 in its storage at address 0
-        const data = await session.state.getStorageOf(dummy).get(U256(0));
+        const data = await session.state.getStorageOf(dummy).get(0n);
         expect(toNumberSafe(data)).to.equal(0x42);
     })
 
     it('staticcall balanceOf', async () => {
         const val = await balanceOfUsdc(session, HAS_USDC_RAW, true);
         // check that this address has usdc
-        assert.isTrue(val.gt(U256(0)));
+        assert.isTrue(val>0n);
     })
 
 
@@ -78,7 +77,7 @@ describe('Calls', () => {
 
         // check that has no USDC
         const initialBalance = await balanceOfUsdc(session, 'b4c79dab8f259c7aee6e5b2aa729821864227e84');
-        assert.isTrue(initialBalance.eq(0));
+        assert.isTrue(initialBalance === 0n);
 
         // send 1000 USDC from usdc whale to 0xb4c79dab8f259c7aee6e5b2aa729821864227e84
         const exec = await session.prepareCall(newTxData(toUint(USDC), {
@@ -88,7 +87,7 @@ describe('Calls', () => {
         await execWatchInstructions(exec);
 
         const newBalance = await balanceOfUsdc(session, 'b4c79dab8f259c7aee6e5b2aa729821864227e84');
-        assert.isTrue(newBalance.gt(0));
+        assert.isTrue(newBalance>0n);
     })
 
     it('DoubleSwap solidity', async () => {
