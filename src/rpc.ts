@@ -133,7 +133,9 @@ export class RPC implements IRpc {
     async getTimestamp(): Promise<number> {
         const block = await this.atBlock();
         const json = await this.fetchJson(`get timestamp`, 'eth_getBlockByNumber', [block, false]);
-        debugger;
-        return json.timestamp;
+        if (typeof json?.timestamp !== 'string' || !json.timestamp.startsWith('0x')) {
+            throw new Error(`Cannot get timestamp: Unknown response format: ${JSON.stringify(json)}`);
+        }
+        return parseInt(json.timestamp, 16);
     }
 }
