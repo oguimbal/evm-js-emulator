@@ -730,7 +730,6 @@ describe('Simple opcodes', () => {
             gasPrice: U256(349834),
             origin: U256(0),
             callvalue: U256(0),
-            timestamp: Date.now() / 1000,
             contract: U256(0),
             retdatasize: 0,
             static: false,

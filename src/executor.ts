@@ -488,9 +488,16 @@ export class Executor implements IExecutor {
         this.decrementGas(3);
         throw new Error('not implemented: coinbase');
     }
-    op_timestamp() {
+    @asyncOp()
+    async op_timestamp() {
         this.decrementGas(3);
-        this.push(U256(this.state.timestamp));
+        if (this.state.forceTimestamp) {
+            this.push(U256(this.state.forceTimestamp));
+            return;
+        }
+        const delta = this.state.timestampDelta ?? 0;
+        const ts = await this.state.session.rpc.getTimestamp();
+        this.push(U256(ts + delta));
     }
     @asyncOp()
     async op_number() {

@@ -42,7 +42,19 @@ export interface NewTxData {
     /** How much ETH has been sent for this execution */
     callvalue: UInt256;
     gasLimit: UInt256;
-    timestamp: number;
+    /**
+     * Force to a given timestamp.
+     *
+     * WARNING ! this is a bit dangerous when specified an RPC,
+     *   as the timestamp you provide could be in the future
+     *    => weird bugs to be expected while executing contracts (substraction overflows, ...)
+     * ... prefer timestampDelta instead while using an RPC
+     */
+    timestamp?: number;
+    /**
+     * Place your transaction in the future compared to the blockchain by providing a timestamp delta
+     */
+    timestampDelta?: number;
     difficulty?: UInt256;
 }
 
@@ -52,9 +64,11 @@ export interface IRpc {
     getCode(contract: HexString): Promise<Uint8Array>
     getStorageAt(address: HexString, key: HexString): Promise<UInt256>
     getBalance(key: HexString): Promise<UInt256>
+    getTimestamp(): Promise<number>;
 }
 export interface ExecState {
-    readonly timestamp: number;
+    readonly forceTimestamp: number | undefined;
+    readonly timestampDelta: number | undefined;
     readonly difficulty: UInt256
     readonly address: UInt256;
     readonly caller: UInt256;
@@ -101,6 +115,7 @@ export interface DeployOpts {
 export interface SessionOpts {
     rpcUrl?: string;
     cacheDir?: string;
+    rpcBlock?: HexString | number;
     /** Discard RPC cache after this period (defaults to 1 day) */
     maxRpcCacheTime?: number;
     contractsNames?: { [key: string]: string | { name: string; abi: utils.Interface } };

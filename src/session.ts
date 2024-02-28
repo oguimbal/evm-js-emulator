@@ -1,10 +1,21 @@
 import * as dotenv from 'dotenv';
-dotenv.config()
+dotenv.config();
 import { Buffer } from 'buffer';
 import { compileCode } from './compiler';
 import { newBlockchain, setStorageInstance } from './blockchain-state';
 import { Executor } from './executor';
-import { ExecState, NewTxData, HexString, IExecutor, ISession, isFailure, IStorage, SessionOpts, DeployOpts, EIP } from './interfaces';
+import {
+    ExecState,
+    NewTxData,
+    HexString,
+    IExecutor,
+    ISession,
+    isFailure,
+    IStorage,
+    SessionOpts,
+    DeployOpts,
+    EIP,
+} from './interfaces';
 import { RPC } from './rpc';
 import { U256, UInt256 } from './uint256';
 import { parseBuffer, to0xAddress, toAddress, toUint } from './utils';
@@ -17,17 +28,16 @@ export class Session implements ISession {
     state: ExecState = newBlockchain(this);
 
     constructor(public opts?: SessionOpts) {
-        this.rpc = new RPC(opts?.rpcUrl ?? process.env.RPC_URL, opts?.maxRpcCacheTime, opts?.cacheDir);
+        this.rpc = new RPC(opts?.rpcUrl ?? process.env.RPC_URL, opts?.maxRpcCacheTime, opts?.rpcBlock, opts?.cacheDir);
         if (opts?.contractsNames) {
-            opts.contractsNames = Object.fromEntries(Object.entries(opts.contractsNames)
-                .map(([k, v]) => [k.toLowerCase(), v]));
+            opts.contractsNames = Object.fromEntries(
+                Object.entries(opts.contractsNames).map(([k, v]) => [k.toLowerCase(), v]),
+            );
         }
     }
 
     supports(eip: keyof EIP): boolean {
-        return !this.opts?.eips
-            || this.opts?.eips === 'all'
-            || !!this.opts.eips[eip];
+        return !this.opts?.eips || this.opts?.eips === 'all' || !!this.opts.eips[eip];
     }
 
     checkSupports(eip: keyof EIP): void {
@@ -36,7 +46,6 @@ export class Session implements ISession {
         }
     }
 
-
     addNames(names?: SessionOpts['contractsNames']) {
         if (!names) {
             return this;
@@ -44,18 +53,25 @@ export class Session implements ISession {
         this.opts ??= {};
         this.opts.contractsNames = {
             ...this.opts.contractsNames,
-            ...Object.fromEntries(Object.entries(names)
-                .map(([k, v]) => [k.toLowerCase(), v])),
-        }
+            ...Object.fromEntries(Object.entries(names).map(([k, v]) => [k.toLowerCase(), v])),
+        };
         return this;
     }
 
     /** Run deployment contract */
-    async deploy(code: string | Buffer | Uint8Array, opts: Omit<NewTxData, 'contract'>, deployOpts?: DeployOpts): Promise<UInt256> {
-        const exec = new Executor(await this.state.newTx({
-            ...opts,
-            contract: toAddress('0x00'),
-        }), opts.gasLimit, (() => { }) as any); // hack
+    async deploy(
+        code: string | Buffer | Uint8Array,
+        opts: Omit<NewTxData, 'contract'>,
+        deployOpts?: DeployOpts,
+    ): Promise<UInt256> {
+        const exec = new Executor(
+            await this.state.newTx({
+                ...opts,
+                contract: toAddress('0x00'),
+            }),
+            opts.gasLimit,
+            (() => {}) as any,
+        ); // hack
 
         const codeBuffer = toCode(code);
         const contractAddress = await exec.doCreate2(U256(0), codeBuffer, deployOpts?.balance ?? U256(0));
@@ -65,7 +81,13 @@ export class Session implements ISession {
 
     /** Deploy raw code (whihout running the constructor) */
     deployRaw(code: string | Buffer | Uint8Array, opts?: DeployOpts, rawStorage?: IStorage) {
-        const compiled = compileCode(toCode(code), opts?.name ?? (a => this.opts?.contractsNames?.[a]), opts?.forceId, opts?.knownSequences, this.opts?.cacheDir);
+        const compiled = compileCode(
+            toCode(code),
+            opts?.name ?? (a => this.opts?.contractsNames?.[a]),
+            opts?.forceId,
+            opts?.knownSequences,
+            this.opts?.cacheDir,
+        );
         this.state = this.state.setContract(compiled);
         if (rawStorage) {
             setStorageInstance(this.state, compiled.contractAddress, rawStorage);
@@ -99,14 +121,12 @@ export class Session implements ISession {
             gasLimit: toUint('ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'),
             gasPrice: U256(349834),
             retdatasize: returndatasize,
-            timestamp: Date.now() / 1000,
-        })
+        });
     }
 
     async getContract(_contract: HexString | UInt256) {
         return await this.state.getContract(_contract);
     }
-
 
     private contractKey(contract: HexString | UInt256) {
         return to0xAddress(toAddress(contract));
@@ -118,7 +138,7 @@ function toCode(code: string | Buffer | Uint8Array): Uint8Array {
         return Buffer.from(code, 'hex');
     }
     if (code instanceof Buffer) {
-        return code.subarray()
+        return code.subarray();
     }
     return code;
 }

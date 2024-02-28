@@ -10,7 +10,8 @@ interface TxInfo {
     /** tx origin */
     readonly origin: UInt256;
     readonly gasPrice: UInt256;
-    readonly timestamp: number;
+    readonly forceTimestamp: number | undefined;
+    readonly timestampDelta: number | undefined;
     readonly difficulty: UInt256;
 }
 
@@ -58,9 +59,14 @@ class BlockchainState implements ExecState {
         }
         return last;
     }
-    get timestamp(): number {
-        return this.store.currentTx.timestamp;
+    get forceTimestamp(): number | undefined {
+        return this.store.currentTx.forceTimestamp;
     }
+
+    get timestampDelta(): number | undefined {
+        return this.store.currentTx.timestampDelta;
+    }
+
     get difficulty(): UInt256 {
         return this.store.currentTx.difficulty;
     }
@@ -213,9 +219,13 @@ class BlockchainState implements ExecState {
             retdatasize: data.retdatasize,
             static: data.static,
         };
+        if (data.timestamp && data.timestampDelta) {
+            throw new Error('Cannot set both timestamp and timestampDelta');
+        }
         let ret = new BlockchainState(this.store
             .set('currentTx', {
-                timestamp: data.timestamp,
+                forceTimestamp: data.timestamp,
+                timestampDelta: data.timestampDelta,
                 gasPrice: data.gasPrice,
                 origin: data.origin,
                 difficulty: data.difficulty ?? U256(0),

@@ -1,26 +1,42 @@
 import fetch from 'node-fetch';
 import { HexString, IRpc } from './interfaces';
-import { UInt256 } from './uint256';
-import { dumpU256, getNodejsLibs, parseBuffer, toUint } from './utils';
+import { U256, UInt256 } from './uint256';
+import { dumpU256, getNodejsLibs, parseBuffer, to32ByteBuffer, toUint } from './utils';
 
 let id = 0;
 export class RPC implements IRpc {
-
     private block: string | undefined;
-    private cache = new Map<string, Uint8Array>();
-    constructor(private url: string | null | undefined, private maxCache: number = 1000 * 3600 * 24, private cacheDir?: string) {
+    private cache = new Map<string, any>();
+    constructor(
+        private url: string | null | undefined,
+        private maxCache: number = 1000 * 3600 * 24,
+        block: string | number | undefined,
+        private cacheDir: string | undefined,
+    ) {
+        if (block) {
+            this.block = typeof block === 'string' ? block : '0x' + block.toString(16);
+        }
     }
 
-    private async fetchBuffer(opName: string, method: string, params: string[], forceBlock?: string) {
+    private async atBlock(forceBlock?: string) {
         let atBlock = forceBlock ?? this.block;
         if (!atBlock) {
-            const block = await this._fetchBuffer(`get current block`, 'eth_blockNumber', [], null);
+            const block = await this._fetchAny(true, `get current block`, 'eth_blockNumber', [], null);
             atBlock = this.block = '0x' + dumpU256(toUint(block));
         }
-        return await this._fetchBuffer(opName, method, params, atBlock);
+        return atBlock;
     }
-    private async _fetchBuffer(opName: string, method: string, params: string[], block: string | null) {
+    private async fetchBuffer(opName: string, method: string, params: any[], forceBlock?: string): Promise<Uint8Array> {
+        const atBlock = await this.atBlock(forceBlock);
+        return await this._fetchAny(true, opName, method, params, atBlock);
+    }
 
+    private async fetchJson(opName: string, method: string, params: any[], forceBlock?: string): Promise<any> {
+        const atBlock = await this.atBlock(forceBlock);
+        return await this._fetchAny(false, opName, method, params, atBlock);
+    }
+
+    private async _fetchAny(buffer: boolean, opName: string, method: string, params: string[], block: string | null) {
         const cacheKey = `${method}-${params.join(',')}`;
         let cached = this.cache.get(cacheKey);
         if (cached) {
@@ -35,10 +51,11 @@ export class RPC implements IRpc {
                 expireDir('rpc', this.maxCache);
                 const cachedRaw = readCache(cacheFile);
                 if (cachedRaw) {
-                    this.cache.set(cacheKey, cached = parseBuffer(cachedRaw.substring(2)));
+                    cached = buffer ? parseBuffer(cachedRaw.substring(2)) : JSON.parse(cachedRaw);
+                    this.cache.set(cacheKey, cached);
                     return cached;
                 }
-                onCache = str => writeCache(cacheFile, str);
+                onCache = val => writeCache(cacheFile, buffer ? val : JSON.stringify(val));
             }
         }
 
@@ -52,6 +69,7 @@ export class RPC implements IRpc {
             // This methods don't accept any parameters
             case 'eth_blockNumber':
             case 'eth_chainId':
+            case 'eth_getBlockByNumber':
                 bodyParams = params;
                 break;
             default:
@@ -60,16 +78,16 @@ export class RPC implements IRpc {
         }
 
         const body = JSON.stringify({
-            "jsonrpc": "2.0",
-            "method": method,
-            "params": bodyParams,
-            "id": ++id,
+            jsonrpc: '2.0',
+            method: method,
+            params: bodyParams,
+            id: ++id,
         });
 
         const result = await fetch(this.url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body
+            body,
         });
 
         const response: any = await result.json();
@@ -78,12 +96,14 @@ export class RPC implements IRpc {
             throw new Error(`Cannot ${opName}  (${result.statusText})`);
         }
 
-        if (typeof response?.result !== 'string' || !response.result.startsWith('0x')) {
-            throw new Error(`Cannot ${opName}: Unknown response format: ${response.error}`);
+        if (buffer) {
+            if (typeof response?.result !== 'string' || !response.result.startsWith('0x')) {
+                throw new Error(`Cannot ${opName}: Unknown response format: ${response.error}`);
+            }
         }
 
         onCache?.(response.result);
-        cached = parseBuffer(response.result);
+        cached = buffer ? parseBuffer(response.result) : response.result;
         this.cache.set(cacheKey, cached);
         return cached;
     }
@@ -108,5 +128,12 @@ export class RPC implements IRpc {
     async getBalance(key: HexString): Promise<UInt256> {
         const buffer = await this.fetchBuffer(`get balance of ${key}`, 'eth_getBalance', [key]);
         return toUint(buffer);
+    }
+
+    async getTimestamp(): Promise<number> {
+        const block = await this.atBlock();
+        const json = await this.fetchJson(`get timestamp`, 'eth_getBlockByNumber', [block, false]);
+        debugger;
+        return json.timestamp;
     }
 }

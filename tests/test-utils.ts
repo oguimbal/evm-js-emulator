@@ -31,7 +31,6 @@ export function newTxData(contract: UInt256, data?: Partial<NewTxData>): NewTxDa
         retdatasize: 0,
         static: false,
         origin: U256(0x1234),
-        timestamp: Date.now() / 1000,
         ...data,
         contract,
     };
@@ -46,7 +45,6 @@ export function newDeployTxData(data?: Partial<NewTxData>): Omit<NewTxData, 'con
         retdatasize: 0,
         static: false,
         origin: U256(0x1234),
-        timestamp: Date.now() / 1000,
         ...data,
     };
 }
@@ -268,7 +266,7 @@ function addressToStr(address: string | HexString | UInt256): string {
     return address;
 }
 
-export const HAS_USDC_RAW = '36d4311fed8f9a2a831b4bb06303de7fe95a3cc5'
+export const HAS_USDC_RAW = 'd6153f5af5679a75cc85d8974463545181f48772'
 export const HAS_USDC = toUint('0x' + HAS_USDC_RAW);
 export async function transferUsdcTo(session: ISession, address: string | HexString | UInt256, qty: UInt256, watch?: boolean) {
     address = addressToStr(address);
