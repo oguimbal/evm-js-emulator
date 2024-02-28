@@ -34,6 +34,9 @@ export function toUint(buf: UIntSource): bigint {
 }
 
 
+export function nullish(val: any): val is null | undefined {
+    return val === undefined || val === null;
+}
 
 const address_mask = toUint('000000000000000000000000FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF');
 export function to0xAddress(address: HexString | bigint): HexString {

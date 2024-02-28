@@ -1,5 +1,5 @@
 import { HexString, IRpc, IStorage } from './interfaces';
-import { dumpU256 } from './utils';
+import { dumpU256, nullish } from './utils';
 import { List, Map as ImMap } from 'immutable';
 
 export class MemStorage implements IStorage {
@@ -54,7 +54,7 @@ export class RpcStorage implements IStorage {
     }
 
     async getBalance(): Promise<bigint> {
-        if (this.balance) {
+        if (!nullish(this.balance)) {
             return this.balance;
         }
         this.balance = (await this.rpc.getBalance(this.address)) ?? 0n;
@@ -66,7 +66,7 @@ export class RpcStorage implements IStorage {
     }
 
     decrementBalance(value: bigint): IStorage {
-        if (typeof this.balance !== 'bigint') {
+        if (nullish(this.balance)) {
             throw new Error('Should have checked balance first');
         }
         const nb = this.balance - value;
@@ -76,7 +76,7 @@ export class RpcStorage implements IStorage {
         return new RpcStorage(this.address, this.rpc, nb, this.adds, this.storage);
     }
     incrementBalance(value: bigint): IStorage {
-        if (this.balance) {
+        if (!nullish(this.balance)) {
             return new RpcStorage(this.address, this.rpc, this.balance + value, this.adds, this.storage);
         }
         return new RpcStorage(this.address, this.rpc, this.balance, this.adds.push(value), this.storage);
