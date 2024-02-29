@@ -57,7 +57,9 @@ export interface NewTxData {
     difficulty?: bigint;
 }
 
+export type OnRpcFetch = (opName: string, method: string, params: any[]) => void;
 export interface IRpc {
+    onFetch(handler: OnRpcFetch): void;
     getChainId(): Promise<Uint8Array>
     getBlock(): Promise<Uint8Array>
     getCode(contract: HexString): Promise<Uint8Array>
@@ -115,8 +117,6 @@ export interface SessionOpts {
     rpcUrl?: string;
     cacheDir?: string;
     rpcBlock?: HexString | number;
-    /** Discard RPC cache after this period (defaults to 1 day) */
-    maxRpcCacheTime?: number;
     contractsNames?: { [key: string]: string | { name: string; abi: utils.Interface } };
     /** EIPs to take into account (defaults to "all") */
     eips?: 'all' | EIP;
@@ -169,7 +169,7 @@ export interface IExecutor {
     onStartingCall(fn: OnStartingCall): void;
     onLog(fn: OnLog): void;
     onEndingCall(fn: OnEndedCall): void;
-    onResult(handler: (ret: StopReason) => void): void;
+    onResult(handler: (ret: StopReason) => void | Promise<void>): void;
     pop(): bigint;
     popAsNum(): number;
     popAsBool(): boolean;

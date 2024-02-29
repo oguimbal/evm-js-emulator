@@ -22,7 +22,7 @@ describe('Bytecode', () => {
         const create2Bytecode = getCreate2ByteCode('DummyConstructor');
 
         // Execute the create2Bytecode
-        const tempCreate2Contract = session.deployRaw(parseBuffer(create2Bytecode), {
+        const tempCreate2Contract = await session.deployRaw(parseBuffer(create2Bytecode), {
             forceId: BigInt('0xbe862ad9abfe6f22bcb087716c7d89a26051f74c'),
         });
         var txData = newTxData(tempCreate2Contract);
@@ -40,7 +40,7 @@ describe('Bytecode', () => {
         // Call the `read()` new account
         const callBytecode = '6357de26a4600052602060006004601c600073' + address + '5af160206000f3';
 
-        const tempCallContract = session.deployRaw(parseBuffer(callBytecode));
+        const tempCallContract = await session.deployRaw(parseBuffer(callBytecode));
         txData = newTxData(tempCallContract);
         exec = await session.prepareCall(txData);
         buffer = await execWatchInstructions(exec);

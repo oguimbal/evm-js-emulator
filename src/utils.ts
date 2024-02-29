@@ -33,7 +33,6 @@ export function toUint(buf: UIntSource): bigint {
     return bytesToBigInt(buf);
 }
 
-
 export function nullish(val: any): val is null | undefined {
     return val === undefined || val === null;
 }
@@ -84,9 +83,28 @@ export function shaOf(buffer: Uint8Array): bigint {
     return toUint(hashed.subarray());
 }
 
+const libByPath = new Map<string | undefined, NodejsLibs>();
+
+export type NodejsLibs =
+    | {
+          require: undefined;
+          writeCache: undefined;
+          readCache: undefined;
+      }
+    | {
+          require: (name: string) => any;
+          writeCache: (file: string, content: string) => Promise<string>;
+          readCache: (file: string) => Promise<string | null>;
+      };
+
 declare var __non_webpack_require__: any;
 declare var require: any;
-export function getNodejsLibs(cacheDir?: string) {
+export function getNodejsLibs(cacheDir?: string): NodejsLibs {
+    let cached = libByPath.get(cacheDir ?? undefined);
+    if (cached) {
+        return cached;
+    }
+
     let req: any = undefined;
     if (typeof __non_webpack_require__ === 'function') {
         req = __non_webpack_require__;
@@ -94,51 +112,84 @@ export function getNodejsLibs(cacheDir?: string) {
         req = require;
     }
     if (req) {
-        const fs = req('fs');
+        const fs = req('fs') as typeof import('fs');
         const path = req('path');
         const process = req('process');
-        const ensureDir = (dir: string) => {
+        const exists = async (path: string) => {
+            return await new Promise<boolean>((res, rej) => {
+                fs.exists(path, res);
+            });
+        };
+        const mkdir = async (path: string) => {
+            return await new Promise<void>((res, rej) => {
+                fs.mkdir(path, err => {
+                    if (err && err.code !== 'EEXIST') {
+                        rej(err);
+                    } else {
+                        res();
+                    }
+                });
+            });
+        };
+        const ensured = new Set<string>();
+        const ensureDir = async (dir: string) => {
+            if (ensured.has(dir)) {
+                return;
+            }
             const parent = path.resolve(dir, '..');
-            if (!fs.existsSync(parent)) {
-                ensureDir(parent);
+            if (!(await exists(parent))) {
+                await ensureDir(parent);
             }
-            if (!fs.existsSync(dir)) {
-                fs.mkdirSync(dir);
+            if (!(await exists(dir))) {
+                await mkdir(dir);
             }
+            ensured.add(dir);
         };
         const globalCache = cacheDir
             ? path.resolve(process.cwd(), cacheDir)
             : path.resolve(process.cwd(), '.evm-js-cache');
-        return {
+        cached = {
             require: req,
-            writeCache: (_file: string, content: string) => {
+            writeCache: async (_file: string, content: string) => {
                 const file = path.resolve(globalCache, _file);
-                ensureDir(path.resolve(file, '..'));
-                fs.writeFileSync(file, content);
+                await ensureDir(path.resolve(file, '..'));
+                await new Promise<void>((res, rej) => {
+                    fs.writeFile(file, content, err => {
+                        if (err) {
+                            rej(err);
+                        } else {
+                            res();
+                        }
+                    });
+                });
                 return file;
             },
-            readCache: (_file: string, expire?: number) => {
+            readCache: async (_file: string) => {
                 const file = path.resolve(globalCache, _file);
-                if (!fs.existsSync(file)) {
+                if (!(await exists(file))) {
                     return null;
                 }
-                return fs.readFileSync(file, 'utf-8');
-            },
-            expireDir: (_dir: string, expire: number) => {
-                const cachePath = path.resolve(globalCache, _dir);
-                if (!fs.existsSync(cachePath)) {
-                    return;
-                }
-                const stat = fs.statSync(cachePath);
-                if (Date.now() - stat.ctimeMs > expire) {
-                    // invalidate cache
-                    fs.rmSync(cachePath, { recursive: true, force: true });
-                    fs.mkdirSync(cachePath);
-                }
+                const result = await new Promise<string>((res, rej) => {
+                    fs.readFile(file, 'utf-8', (err, data) => {
+                        if (err) {
+                            rej(err);
+                        } else {
+                            res(data);
+                        }
+                    });
+                });
+                return result ?? null;
             },
         };
+    } else {
+        cached = {
+            require: undefined,
+            writeCache: undefined,
+            readCache: undefined,
+        };
     }
-    return {};
+    libByPath.set(cacheDir ?? undefined, cached);
+    return cached;
 }
 
 export function parseBuffer(data: HexString | string): Uint8Array {
@@ -149,4 +200,35 @@ export function parseBuffer(data: HexString | string): Uint8Array {
         data = '0' + data;
     }
     return Buffer.from(data, 'hex').subarray();
+}
+
+/**
+ * Similar to Promise.all(), but limits parallelization to a certain numbe of parallel threads.
+ */
+export async function parallel<T>(
+    concurrent: number,
+    collection: Iterable<T>,
+    processor: (item: T, i: number) => Promise<any>,
+) {
+    // queue up simultaneous calls
+    const queue: any[] = [];
+    const ret = [];
+    let i = 0;
+    for (const fn of collection) {
+        // fire the async function, add its promise to the queue, and remove
+        // it from queue when complete
+        const p = processor(fn, i++).then(res => {
+            queue.splice(queue.indexOf(p), 1);
+            return res;
+        });
+        queue.push(p);
+        ret.push(p);
+        // if max concurrent, wait for one to finish
+        if (queue.length >= concurrent) {
+            // eslint-disable-next-line no-await-in-loop
+            await Promise.race(queue);
+        }
+    }
+    // wait for the rest of the calls to finish
+    await Promise.all(queue);
 }

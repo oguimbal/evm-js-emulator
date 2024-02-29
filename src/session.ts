@@ -27,7 +27,7 @@ export class Session implements ISession {
     state: ExecState = newBlockchain(this);
 
     constructor(public opts?: SessionOpts) {
-        this.rpc = new RPC(opts?.rpcUrl ?? process.env.RPC_URL, opts?.maxRpcCacheTime, opts?.rpcBlock, opts?.cacheDir);
+        this.rpc = new RPC(opts?.rpcUrl ?? process.env.RPC_URL, opts?.rpcBlock, opts?.cacheDir);
         if (opts?.contractsNames) {
             opts.contractsNames = Object.fromEntries(
                 Object.entries(opts.contractsNames).map(([k, v]) => [k.toLowerCase(), v]),
@@ -75,12 +75,13 @@ export class Session implements ISession {
         const codeBuffer = toCode(code);
         const contractAddress = await exec.doCreate2(0n, codeBuffer, deployOpts?.balance ?? 0n);
         this.state = exec.state.popCallStack();
+        await this.rpc.sealExecution();
         return contractAddress;
     }
 
     /** Deploy raw code (whihout running the constructor) */
-    deployRaw(code: string | Buffer | Uint8Array, opts?: DeployOpts, rawStorage?: IStorage) {
-        const compiled = compileCode(
+    async deployRaw(code: string | Buffer | Uint8Array, opts?: DeployOpts, rawStorage?: IStorage) {
+        const compiled = await compileCode(
             toCode(code),
             opts?.name ?? (a => this.opts?.contractsNames?.[a]),
             opts?.forceId,
@@ -97,10 +98,11 @@ export class Session implements ISession {
     async prepareCall(input: NewTxData): Promise<IExecutor> {
         const code = await this.getContract(input.contract);
         const exec = new Executor(await this.state.newTx(input), input.gasLimit, code);
-        exec.onResult(ret => {
+        exec.onResult(async ret => {
             if (!isFailure(ret)) {
                 this.state = ret.newState.popCallStack();
             }
+            await this.rpc.sealExecution();
         });
         return exec;
     }

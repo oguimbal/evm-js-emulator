@@ -112,7 +112,7 @@ class BlockchainState implements ExecState {
         if (!compiled) {
             const hex = to0xAddress(contractAddress);
             const code = await this.getBytecodeFromCache(contractAddress);
-            compiled = compileCode(code, this.session.opts?.contractsNames?.[hex], contractAddress, undefined, this.session.opts?.cacheDir);
+            compiled = await compileCode(code, this.session.opts?.contractsNames?.[hex], contractAddress, undefined, this.session.opts?.cacheDir);
             const contracts = this.store.contracts.set(contractAddress, compiled);
             // it is ok to mutate store, since this is repeteable in case the current tx reverts
             this.store = this.store.set('contracts', contracts);
@@ -127,7 +127,7 @@ class BlockchainState implements ExecState {
 
         if (readCache) {
             // when running nodejs, check if we have this contract in cache
-            const cached = readCache(cacheFile);
+            const cached = await readCache(cacheFile);
             if (cached) {
                 return Buffer.from(cached, 'hex').subarray();
             }
@@ -138,7 +138,7 @@ class BlockchainState implements ExecState {
 
         if (writeCache) {
             // when running nodejs, cache the contract
-            writeCache(cacheFile, Buffer.from(online).toString('hex'));
+            await writeCache(cacheFile, Buffer.from(online).toString('hex'));
         }
 
         return online;

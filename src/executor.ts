@@ -61,7 +61,7 @@ export class Executor implements IExecutor {
     private mem = new Memory();
     readonly logs: Log[] = [];
     private stop: StopReason | null = null;
-    private _onResult: ((ret: StopReason) => void)[] = [];
+    private _onResult: ((ret: StopReason) => void | Promise<void>)[] = [];
     private opSpy: string[] | null = null;
     private _onMemChange: ((bytes: () => number[]) => void)[] | null = null;
     private _onStartCall: OnStartingCall[] | null = null;
@@ -103,7 +103,7 @@ export class Executor implements IExecutor {
             gas: this.gasSpent,
         };
         for (const or of this._onResult) {
-            or(result);
+            await or(result);
         }
         return result;
     }
@@ -229,7 +229,7 @@ export class Executor implements IExecutor {
         this._onLog.push(fn);
     }
 
-    onResult(handler: (ret: StopReason) => void) {
+    onResult(handler: (ret: StopReason) => void | Promise<void>) {
         this._onResult.push(handler);
     }
     popN(num: number): bigint[] {
@@ -1276,7 +1276,7 @@ export class Executor implements IExecutor {
         const newState = await this.state.pushCallTo(accountAddress, value, code, 0x20);
 
         // compile the deployer code
-        const compiledDeployer = compileCode(code, undefined, accountAddress, undefined, undefined);
+        const compiledDeployer = await compileCode(code, undefined, accountAddress, undefined, undefined);
         const executor = new Executor(newState, this.gas, compiledDeployer);
 
         // execute deployer
@@ -1289,7 +1289,7 @@ export class Executor implements IExecutor {
         }
 
         // compile the contract code (returned by the deployer)
-        const compiledContract = compileCode(result.data, undefined, accountAddress, undefined, undefined);
+        const compiledContract = await compileCode(result.data, undefined, accountAddress, undefined, undefined);
         this.state = this.state.setContract(compiledContract);
 
         this.decrementGas(result.gas);

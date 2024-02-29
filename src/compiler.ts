@@ -18,13 +18,13 @@ type Ret = 'always' | 'maybe' | 'no';
 type Nm = string | Def | null | undefined;
 type Def = { name: string; abi?: utils.Interface };
 
-export function compileCode(
+export async function compileCode(
     contractCode: Uint8Array,
     _def: Nm | ((address: HexString) => Nm),
     forceAddress?: bigint,
     knownSequences?: KnownSequence[],
     cacheDir?: string,
-): CompiledCode {
+): Promise<CompiledCode> {
     // compute all labels
     let codeParts = computeCodeparts(contractCode);
 
@@ -101,7 +101,7 @@ return ${hasAsync ? 'async' : ''} () =>  {
         const hash = (contractName ?? 'µ') + '_' + keccak256(Buffer.from(contractCode)).toString('hex');
 
         // write code
-        const target = writeCache(
+        const target = await writeCache(
             `contracts/${hash}.js`,
             `${code}
 module.exports = ${contractName ?? 'entry'}`,

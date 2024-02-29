@@ -53,7 +53,7 @@ export function newDeployTxData(data?: Partial<NewTxData>): Omit<NewTxData, 'con
 
 export async function executeBytecode(ops: string | number[], opts?: Partial<NewTxData>, mintSenderBalance?: bigint) {
     const session = new Session(TEST_SESSION_OPTS);
-    const contract = session.deployRaw(typeof ops === 'string' ? parseBuffer(ops) : Buffer.from(ops));
+    const contract = await session.deployRaw(typeof ops === 'string' ? parseBuffer(ops) : Buffer.from(ops));
     const txData = newTxData(contract, opts);
     if (mintSenderBalance) {
         session.state = session.state.mintValue(txData.origin, mintSenderBalance);
