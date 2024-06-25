@@ -11,6 +11,7 @@ interface TxInfo {
     readonly gasPrice: bigint;
     readonly forceTimestamp: number | undefined;
     readonly timestampDelta: number | undefined;
+    readonly forceBasefee: bigint | undefined;
     readonly difficulty: bigint;
 }
 
@@ -41,15 +42,13 @@ const newStore = Record<State>({
     storages: ImMap(),
     callStack: List(),
     contracts: ImMap(),
-})
+});
 export function newBlockchain(session: ISession) {
     return new BlockchainState(newStore().set('session', session));
 }
 
 class BlockchainState implements ExecState {
-
-    constructor(private store: RecordOf<State>) {
-    }
+    constructor(private store: RecordOf<State>) {}
 
     get stack() {
         const last = this.store.callStack.last();
@@ -64,6 +63,10 @@ class BlockchainState implements ExecState {
 
     get timestampDelta(): number | undefined {
         return this.store.currentTx.timestampDelta;
+    }
+
+    get forceBasefee(): bigint | undefined {
+        return this.store.currentTx.forceBasefee;
     }
 
     get difficulty(): bigint {
@@ -104,7 +107,6 @@ class BlockchainState implements ExecState {
         return this.getStorageOf(this.current0x);
     }
 
-
     async getContract(hex: HexString | bigint): Promise<CompiledCode> {
         const contractAddress = typeof hex === 'string' ? toUint(hex) : hex;
         let compiled = this.store.contracts.get(contractAddress);
@@ -112,7 +114,13 @@ class BlockchainState implements ExecState {
         if (!compiled) {
             const hex = to0xAddress(contractAddress);
             const code = await this.getBytecodeFromCache(contractAddress);
-            compiled = await compileCode(code, this.session.opts?.contractsNames?.[hex], contractAddress, undefined, this.session.opts?.cacheDir);
+            compiled = await compileCode(
+                code,
+                this.session.opts?.contractsNames?.[hex],
+                contractAddress,
+                undefined,
+                this.session.opts?.cacheDir,
+            );
             const contracts = this.store.contracts.set(contractAddress, compiled);
             // it is ok to mutate store, since this is repeteable in case the current tx reverts
             this.store = this.store.set('contracts', contracts);
@@ -153,7 +161,10 @@ class BlockchainState implements ExecState {
         hex = typeof hex === 'string' ? toUint(hex) : hex;
         let cached = this.store.storages.get(hex);
         if (!cached) {
-            const storages = this.store.storages.set(hex, cached = new RpcStorage(to0xAddress(hex), this.session.rpc));
+            const storages = this.store.storages.set(
+                hex,
+                (cached = new RpcStorage(to0xAddress(hex), this.session.rpc)),
+            );
             this.store = this.store.set('storages', storages);
         }
         return cached;
@@ -177,8 +188,6 @@ class BlockchainState implements ExecState {
         return this._changeStorage(this.current0x, s => s.set(location, value));
     }
 
-
-
     async transferFrom(from: bigint, to: bigint, value: bigint): Promise<BlockchainState> {
         if (value === 0n) {
             return this;
@@ -186,15 +195,15 @@ class BlockchainState implements ExecState {
 
         // check has enough funds
         const fromBalance = await this.getStorageOf(from).getBalance();
-        if (fromBalance<value) {
+        if (fromBalance < value) {
             throw new Error(`Insufficient balance in ${to0xAddress(from)} to transfer ${dumpU256(value)} to ${to}`);
         }
 
         // modify state
-        return this._changeStorage(from, s => s.decrementBalance(value))
-            ._changeStorage(to, s => s.incrementBalance(value));
+        return this._changeStorage(from, s => s.decrementBalance(value))._changeStorage(to, s =>
+            s.incrementBalance(value),
+        );
     }
-
 
     transfer(_to: bigint, value: bigint): Promise<BlockchainState> {
         return this.transferFrom(this.stack.currentStorageCtx, _to, value);
@@ -220,47 +229,55 @@ class BlockchainState implements ExecState {
         if (data.timestamp && data.timestampDelta) {
             throw new Error('Cannot set both timestamp and timestampDelta');
         }
-        let ret = new BlockchainState(this.store
-            .set('currentTx', {
+        let ret = new BlockchainState(
+            this.store.set('currentTx', {
                 forceTimestamp: data.timestamp,
                 timestampDelta: data.timestampDelta,
                 gasPrice: data.gasPrice,
                 origin: data.origin,
                 difficulty: data.difficulty ?? 0n,
-            })
-        )
-        ret = await ret.transferFrom(full.caller, full.address, full.callValue)
+            }),
+        );
+        ret = await ret.transferFrom(full.caller, full.address, full.callValue);
         return ret.pushCallStack(full);
     }
 
     private pushCallStack(stack: Partial<Stack>): ExecState {
-        return new BlockchainState(this.store.set('callStack', this.store.callStack.push({
-            ...this.store.callStack.last(),
-            ...stack,
-        })));
+        return new BlockchainState(
+            this.store.set(
+                'callStack',
+                this.store.callStack.push({
+                    ...this.store.callStack.last(),
+                    ...stack,
+                }),
+            ),
+        );
     }
 
     setStorageLocation(address: bigint, storage: IStorage): ExecState {
         throw new Error('Method not implemented.');
     }
 
-    async pushCallTo(contract: bigint, callValue: bigint, calldata: Uint8Array, retdatasize: number): Promise<ExecState> {
+    async pushCallTo(
+        contract: bigint,
+        callValue: bigint,
+        calldata: Uint8Array,
+        retdatasize: number,
+    ): Promise<ExecState> {
         if (this.static) {
             throw new Error('Opcode "call" is not valid on a static execution context');
         }
 
         // transfer value
-        let ret = await this
-            .transfer(contract, callValue);
-
+        let ret = await this.transfer(contract, callValue);
 
         return ret.pushCallStack({
             ...this._buildStack(calldata, retdatasize),
             address: contract,
-            currentStorageCtx: contract,  // switch to the called contract's context  (balance & storage)
+            currentStorageCtx: contract, // switch to the called contract's context  (balance & storage)
             callValue,
             caller: this.address,
-        })
+        });
     }
 
     pushDelegatecallTo(contract: bigint, calldata: Uint8Array, retdatasize: number): ExecState {
@@ -273,7 +290,7 @@ class BlockchainState implements ExecState {
         return this.pushCallStack({
             ...this._buildStack(calldata, retdatasize),
             address: contract, // only change contract address
-            currentStorageCtx: contract,  // switch to the called contract's context  (balance & storage)
+            currentStorageCtx: contract, // switch to the called contract's context  (balance & storage)
             caller: this.address,
             callValue: 0n,
             static: true,
@@ -300,7 +317,6 @@ class BlockchainState implements ExecState {
     setStorageInstance(contract: bigint, storage: IStorage) {
         this.store = this.store.set('storages', this.store.storages.set(contract, storage));
     }
-
 }
 
 /** @deprecated use with care */

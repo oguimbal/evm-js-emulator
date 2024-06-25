@@ -9,14 +9,12 @@ export interface IStorage {
     incrementBalance(value: bigint): IStorage;
 }
 
-
 export type CompiledCode = ((exec: IExecutor) => () => void) & {
     readonly code: IMemReader;
     readonly contractName: string;
     readonly contractAbi: utils.Interface | undefined;
     readonly contractAddress: bigint;
 };
-
 
 export interface IMemReader {
     readonly size: number;
@@ -60,17 +58,18 @@ export interface NewTxData {
 export type OnRpcFetch = (opName: string, method: string, params: any[]) => void;
 export interface IRpc {
     onFetch(handler: OnRpcFetch): void;
-    getChainId(): Promise<Uint8Array>
-    getBlock(): Promise<Uint8Array>
-    getCode(contract: HexString): Promise<Uint8Array>
-    getStorageAt(address: HexString, key: bigint): Promise<bigint>
-    getBalance(key: HexString): Promise<bigint>
+    getChainId(): Promise<Uint8Array>;
+    getBlock(): Promise<Uint8Array>;
+    getCode(contract: HexString): Promise<Uint8Array>;
+    getStorageAt(address: HexString, key: bigint): Promise<bigint>;
+    getBalance(key: HexString): Promise<bigint>;
     getTimestamp(): Promise<number>;
 }
 export interface ExecState {
     readonly forceTimestamp: number | undefined;
     readonly timestampDelta: number | undefined;
-    readonly difficulty: bigint
+    readonly forceBasefee: bigint | undefined;
+    readonly difficulty: bigint;
     readonly address: bigint;
     readonly caller: bigint;
     readonly origin: bigint;
@@ -78,9 +77,8 @@ export interface ExecState {
     readonly gasPrice: bigint;
     readonly callvalue: bigint;
     readonly calldata: IMemReader;
-    readonly static: boolean
+    readonly static: boolean;
     readonly session: ISession;
-
 
     newTx(data: NewTxData): Promise<ExecState>;
 
@@ -132,18 +130,25 @@ export interface ISession {
     readonly opts?: SessionOpts | undefined;
     getContract(contract: HexString | bigint): Promise<CompiledCode>;
     prepareCall(input: NewTxData): Promise<IExecutor>;
-    prepareStaticCall(contract: HexString | bigint, calldata: string | Uint8Array, returnDataSize: number): Promise<IExecutor>;
+    prepareStaticCall(
+        contract: HexString | bigint,
+        calldata: string | Uint8Array,
+        returnDataSize: number,
+    ): Promise<IExecutor>;
     addNames(names?: SessionOpts['contractsNames']): this;
-    deploy(code: string | Buffer | Uint8Array, opts: Omit<NewTxData, 'contract'>, deployOpts?: DeployOpts): Promise<bigint>;
+    deploy(
+        code: string | Buffer | Uint8Array,
+        opts: Omit<NewTxData, 'contract'>,
+        deployOpts?: DeployOpts,
+    ): Promise<bigint>;
     supports(eip: keyof EIP): boolean;
     checkSupports(eip: keyof EIP): void;
 }
 
-
 export type StopReason =
-    | { type: 'stop', data?: null; newState: ExecState; gas: bigint; }
-    | { type: 'return'; data: Uint8Array; newState: ExecState; gas: bigint; }
-    | { type: 'end of code', data?: null; newState: ExecState; gas: bigint; }
+    | { type: 'stop'; data?: null; newState: ExecState; gas: bigint }
+    | { type: 'return'; data: Uint8Array; newState: ExecState; gas: bigint }
+    | { type: 'end of code'; data?: null; newState: ExecState; gas: bigint }
     | Revert;
 
 type Revert = { type: 'revert'; data: Uint8Array; gas: bigint };
@@ -163,8 +168,16 @@ export interface IExecutor {
     readonly logs: readonly Log[];
     readonly gas: bigint;
     copyStack(): readonly bigint[];
-    execute(): Promise<StopReason>
-    watch(handler: (opcode: number, opName: string, paddedOpName: string, opSpy: string[], inKnownSequence: string | null) => any): void;
+    execute(): Promise<StopReason>;
+    watch(
+        handler: (
+            opcode: number,
+            opName: string,
+            paddedOpName: string,
+            opSpy: string[],
+            inKnownSequence: string | null,
+        ) => any,
+    ): void;
     onMemChange(fn: (bytes: () => number[]) => void): void;
     onStartingCall(fn: OnStartingCall): void;
     onLog(fn: OnLog): void;
@@ -178,8 +191,16 @@ export interface IExecutor {
     dumpStack(): string[];
 }
 
-export type OnStartingCall = (exec: IExecutor, callType: 'call' | 'callcode' | 'staticcall' | 'delegatecall' | 'create2') => void;
-export type OnEndedCall = (exec: IExecutor, callType: 'call' | 'callcode' | 'staticcall' | 'delegatecall' | 'create2', success: boolean, reason: StopReason | undefined) => void;
+export type OnStartingCall = (
+    exec: IExecutor,
+    callType: 'call' | 'callcode' | 'staticcall' | 'delegatecall' | 'create2',
+) => void;
+export type OnEndedCall = (
+    exec: IExecutor,
+    callType: 'call' | 'callcode' | 'staticcall' | 'delegatecall' | 'create2',
+    success: boolean,
+    reason: StopReason | undefined,
+) => void;
 export type OnLog = (log: Log) => void;
 export interface Log {
     readonly topics: readonly bigint[];
