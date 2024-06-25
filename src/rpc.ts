@@ -1,10 +1,9 @@
 import fetch from 'node-fetch';
 import { HexString, IRpc, OnRpcFetch } from './interfaces';
-import { dumpU256, getNodejsLibs, parallel, parseBuffer, to0xAddress, toUint } from './utils';
+import { dumpU256, getNodejsLibs, lazy, parallel, parseBuffer, to0xAddress, toUint } from './utils';
 
 let id = 0;
 export class RPC implements IRpc {
-    private block: string | undefined;
     private cache = new Map<string, any>();
     private storageGets = new Map<HexString, StorageToSeal>();
     private handlers: OnRpcFetch[] = [];
@@ -14,7 +13,7 @@ export class RPC implements IRpc {
         private cacheDir: string | undefined,
     ) {
         if (block) {
-            this.block = typeof block === 'string' ? block : '0x' + block.toString(16);
+            this.atBlock = lazy.resolve(typeof block === 'string' ? block : '0x' + block.toString(16));
         }
         // this.onFetch((op, method, params) => {
         //     console.log('RPC ' + op);
@@ -25,21 +24,18 @@ export class RPC implements IRpc {
         this.handlers.push(h);
     }
 
-    private async atBlock(forceBlock?: string) {
-        let atBlock = forceBlock ?? this.block;
-        if (!atBlock) {
-            const block = await this._fetchCached(true, `get current block`, 'eth_blockNumber', [], null);
-            atBlock = this.block = '0x' + dumpU256(toUint(block));
-        }
-        return atBlock;
-    }
-    private async fetchBuffer(opName: string, method: string, params: any[], forceBlock?: string): Promise<Uint8Array> {
-        const atBlock = await this.atBlock(forceBlock);
+    private atBlock = lazy(async () => {
+        const block = await this._fetchCached(true, `get current block`, 'eth_blockNumber', [], null);
+        return '0x' + dumpU256(toUint(block));
+    });
+
+    private async fetchBuffer(opName: string, method: string, params: any[]): Promise<Uint8Array> {
+        const atBlock = await this.atBlock();
         return await this._fetchCached(true, opName, method, params, atBlock);
     }
 
-    private async fetchJson(opName: string, method: string, params: any[], forceBlock?: string): Promise<any> {
-        const atBlock = await this.atBlock(forceBlock);
+    private async fetchJson(opName: string, method: string, params: any[]): Promise<any> {
+        const atBlock = await this.atBlock();
         return await this._fetchCached(false, opName, method, params, atBlock);
     }
 
@@ -223,8 +219,22 @@ export class RPC implements IRpc {
         };
 
         // 20 parallel fetches
-        await parallel(20, keys, async key => {
-            await this._getStorageAt(address, key, handleNonCached);
+        await parallel(15, keys, async key => {
+            let retry = 0;
+            while (true) {
+                try {
+                    await this._getStorageAt(address, key, handleNonCached);
+                    return;
+                } catch (e: any) {
+                    if (!e.toString().includes('Too Many Requests')) {
+                        throw e;
+                    }
+                    if (++retry > 3) {
+                        throw e;
+                    }
+                    await new Promise(r => setTimeout(r, 500));
+                }
+            }
         });
 
         return {

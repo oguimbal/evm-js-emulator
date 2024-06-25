@@ -232,3 +232,58 @@ export async function parallel<T>(
     // wait for the rest of the calls to finish
     await Promise.all(queue);
 }
+
+export type Lazy<T> = (() => Promise<T>) & {
+    /**
+     * Drops the value already loaded.
+     * Next get will trigger a reload.
+     */
+    refresh: () => void;
+    /**
+     * Triggers the refresh of this lazy now.
+     * If blockOthers is true, other gets will have to wait for this reload to finish to access the value.
+     * Otherwise, they will still have the currently cached value at hand.
+     */
+    hotRefresh(blockOthers: boolean): Promise<T>;
+};
+
+export function lazy<T>(ctor: () => Promise<T>): Lazy<T> {
+    let cached: Promise<T>;
+    let retreived = false;
+    const ret = async () => {
+        if (retreived) {
+            return await cached;
+        }
+        cached = ctor();
+        retreived = true;
+        return await cached;
+    };
+    ret.refresh = () => {
+        retreived = false;
+    };
+    ret.hotRefresh = async (blockOthers: boolean) => {
+        const newValue = ctor();
+        if (blockOthers || !retreived) {
+            retreived = true;
+            cached = newValue;
+        }
+        const oldCached = cached;
+        const ret = await newValue;
+        if (oldCached === cached) {
+            // if no other refreshes since, update cache.
+            cached = newValue;
+        }
+        return ret;
+    };
+    return ret;
+}
+lazy.resolve = <T>(value: T) => lazy(() => Promise.resolve(value));
+lazy.map = <T, O>(value: Lazy<T>, map: (value: T) => O | Promise<O>) => {
+    const ret = lazy(async () => await map(await value()));
+    const oldRefresh = ret.refresh;
+    ret.refresh = () => {
+        oldRefresh();
+        value.refresh();
+    };
+    return ret;
+};
