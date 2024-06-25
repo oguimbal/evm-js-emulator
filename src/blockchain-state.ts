@@ -236,6 +236,7 @@ class BlockchainState implements ExecState {
                 gasPrice: data.gasPrice,
                 origin: data.origin,
                 difficulty: data.difficulty ?? 0n,
+                forceBasefee: data.baseFee,
             }),
         );
         ret = await ret.transferFrom(full.caller, full.address, full.callValue);

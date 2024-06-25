@@ -53,6 +53,7 @@ export interface NewTxData {
      */
     timestampDelta?: number;
     difficulty?: bigint;
+    baseFee?: bigint;
 }
 
 export type OnRpcFetch = (opName: string, method: string, params: any[]) => void;
