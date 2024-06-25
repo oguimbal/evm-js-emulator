@@ -14,7 +14,7 @@ import {
 } from './interfaces';
 import { MemReader } from './mem-reader';
 import { Memory } from './memory';
-import { dumpU256, parseBuffer, toNumberSafe, toUint } from './utils';
+import { dumpU256, nullish, parseBuffer, toNumberSafe, toUint } from './utils';
 import { Buffer } from 'buffer';
 import { utils } from 'ethers';
 import { compileCode } from './compiler';
@@ -773,7 +773,11 @@ export class Executor implements IExecutor {
     }
     op_basefee() {
         this.decrementGas(3);
-        throw new Error('not implemented: basefee');
+        if (!nullish(this.state.forceBasefee) && this.state.forceBasefee >= 0n) {
+            this.push(this.state.forceBasefee);
+            return;
+        }
+        this.push(BigInt(10));
     }
     op_pop() {
         this.decrementGas(3);
