@@ -8,6 +8,12 @@ export class Memory extends MemReader<number[]> {
         super([]);
     }
 
+    copy(destOffset: number, offset: number, size: number) {
+        this.resize(destOffset + size);
+        for (let i = 0; i < size; i++) {
+            this.mem[destOffset + i] = this.mem[offset + i];
+        }
+    }
 
     set(index: number, byte: number) {
         if (byte < 0 || byte > 255) {
@@ -20,7 +26,7 @@ export class Memory extends MemReader<number[]> {
 
     setUint256(index: number, value: bigint) {
         this.resize(index + 32);
-        const bytes = setLengthLeft(bigIntToBytes(value), 32)
+        const bytes = setLengthLeft(bigIntToBytes(value), 32);
         for (let i = 0; i < 32; i++) {
             this.mem[index + i] = bytes[i];
         }
