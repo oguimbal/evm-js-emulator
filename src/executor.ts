@@ -772,12 +772,20 @@ export class Executor implements IExecutor {
         this.push(await this.state.getBalance());
     }
     op_basefee() {
-        this.decrementGas(3);
+        this.decrementGas(2);
         if (!nullish(this.state.forceBasefee) && this.state.forceBasefee >= 0n) {
             this.push(this.state.forceBasefee);
             return;
         }
         this.push(BigInt(10));
+    }
+    op_blobhash() {
+        this.decrementGas(3);
+        throw new Error('not implemented: blobhash');
+    }
+    op_blobbasefee() {
+        this.decrementGas(2);
+        throw new Error('not implemented: blobbasefee');
     }
     op_pop() {
         this.decrementGas(3);
@@ -831,6 +839,25 @@ export class Executor implements IExecutor {
     op_jumpdest() {
         this.decrementGas(3);
         // do nothing
+    }
+    op_tload() {
+        this.decrementGas(100);
+        throw new Error('not implemented: tload');
+    }
+    op_tstore() {
+        this.decrementGas(100);
+        throw new Error('not implemented: tstore');
+    }
+    op_mcopy() {
+        const destOffset = this.popAsNum();
+        const offset = this.popAsNum();
+        const size = this.popAsNum();
+        // gas cost: 3 + 3*words copied + regular memory expansion cost
+        this.decrementGas(3 + 3 * Math.ceil(size / 32));
+        if (!size) {
+            return;
+        }
+        this.mem.copy(destOffset, offset, size);
     }
     private doOpPush(toPush: number[]) {
         this.push(toUint(new Uint8Array(toPush)));
@@ -1442,8 +1469,8 @@ export const ops: OpFn[] = [
     p.op_chainid,
     p.op_selfbalance,
     p.op_basefee,
-    p.op_unused,
-    p.op_unused,
+    p.op_blobhash,
+    p.op_blobbasefee,
     p.op_unused,
     p.op_unused,
     p.op_unused,
@@ -1461,9 +1488,9 @@ export const ops: OpFn[] = [
     p.op_msize,
     p.op_gas,
     p.op_jumpdest,
-    p.op_unused,
-    p.op_unused,
-    p.op_unused,
+    p.op_tload,
+    p.op_tstore,
+    p.op_mcopy,
     p.op_push0,
     p.op_push1,
     p.op_push2,
