@@ -890,6 +890,28 @@ describe('Simple opcodes', () => {
                 'ff43ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
             );
         });
+
+
+        it('can store too big', async () => {
+            const exec = await fakeExec();
+            // store something big in memory
+            exec.push(BigInt('0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF'));
+            exec.push(0n); // offset
+            exec.op_mstore();
+            // store a byte
+            exec.push(BigInt(0x4243)); // value
+            exec.push(1n); // offset
+            exec.op_mstore8();
+
+            // load at 0
+            exec.push(0n);
+            exec.op_mload();
+
+            // check result
+            expect(exec.pop().toString(16)).to.equal(
+                'ff43ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
+            );
+        });
     });
 
     it('sload', async () => {
@@ -898,5 +920,80 @@ describe('Simple opcodes', () => {
         await exec.op_sload();
         const owner = exec.pop();
         expect(owner.toString(16)).to.equal('807a96288a1a408dbc13de2b1d087d10356395d2');
+    });
+
+    describe('mcopy', () => {
+        it('can copy within bounds', async () => {
+            const exec = await fakeExec();
+            // https://www.evm.codes/playground?fork=cancun&unit=Wei&codeType=Mnemonic&code=%27ySet%20the%20stateuv0x000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f~32wMSTOREwwyExamplrsizroffset~0%20%2Fydestination%20offsetwMCOPY%27~u1%20y%2F%2F%20w%5Cnv32%20uwPUSHre~vy%01ruvwy~_
+            exec.push(BigInt('0x000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f'));
+            exec.push(32n);
+            exec.op_mstore();
+
+            expect(exec.dumpMemory()).to.deep.equal([
+                '0000000000000000000000000000000000000000000000000000000000000000',
+                '000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f',
+            ]);
+
+            exec.push(32n); // size
+            exec.push(32n); // offset
+            exec.push(0n); // destination offset
+            exec.op_mcopy();
+
+            expect(exec.dumpMemory()).to.deep.equal([
+                '000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f',
+                '000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f',
+            ]);
+        });
+
+
+        it('can extend and copy', async () => {
+            const exec = await fakeExec();
+            // https://www.evm.codes/playground?fork=cancun&unit=Wei&codeType=Mnemonic&code=%27ySet%20the%20stateuv0x000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f~32wMSTOREwwyExamplrsizroffset~0%20%2Fydestination%20offsetwMCOPY%27~u1%20y%2F%2F%20w%5Cnv32%20uwPUSHre~vy%01ruvwy~_
+            exec.push(BigInt('0x000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f'));
+            exec.push(0n);
+            exec.op_mstore();
+
+            expect(exec.dumpMemory()).to.deep.equal([
+                '000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f',
+            ]);
+
+            exec.push(32n); // size
+            exec.push(0n); // offset
+            exec.push(32n); // destination offset
+            exec.op_mcopy();
+
+            expect(exec.dumpMemory()).to.deep.equal([
+                '000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f',
+                '000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f',
+            ]);
+        });
+
+
+        it('can copy one byte', async () => {
+            const exec = await fakeExec();
+            // https://www.evm.codes/playground?fork=cancun&unit=Wei&codeType=Mnemonic&code=%27ySet%20the%20stateuv0x000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f~32wMSTOREwwyExamplrsizroffset~0%20%2Fydestination%20offsetwMCOPY%27~u1%20y%2F%2F%20w%5Cnv32%20uwPUSHre~vy%01ruvwy~_
+            exec.push(BigInt('0x1111111111111111111111111111111111111111111111111111111111111111'));
+            exec.push(0n);
+            exec.op_mstore();
+            exec.push(BigInt('0x2222222222222222222222222222222222222222222222222222222222222222'));
+            exec.push(32n);
+            exec.op_mstore();
+
+            expect(exec.dumpMemory()).to.deep.equal([
+                '1111111111111111111111111111111111111111111111111111111111111111',
+                '2222222222222222222222222222222222222222222222222222222222222222',
+            ]);
+
+            exec.push(1n); // size
+            exec.push(5n); // offset
+            exec.push(35n); // destination offset
+            exec.op_mcopy();
+
+            expect(exec.dumpMemory()).to.deep.equal([
+                '1111111111111111111111111111111111111111111111111111111111111111',
+                '2222221122222222222222222222222222222222222222222222222222222222',
+            ]);
+        });
     });
 });

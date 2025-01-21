@@ -149,7 +149,7 @@ export class Executor implements IExecutor {
                 return dumped;
             }
             dumped.push(Buffer.from(uint).toString('hex'));
-            offset += 33;
+            offset += 32;
         }
     }
 
